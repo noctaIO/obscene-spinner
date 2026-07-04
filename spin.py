@@ -39,6 +39,16 @@ VERBS = [
     "crashing-out", "overthinking", "regretting", "guessing",
 ]
 
+# --- candidates under test on feature/new-verbs ---
+# Prune the duds before this merges to master.
+CANDIDATES = [
+    "enshittifying", "rage-quitting", "goblin-moding", "white-knuckling",
+    "log-spelunking", "prod-poking", "rerolling", "necro-coding",
+    "context-stuffing", "flaky-test-rerunning", "touching-grass",
+    "curse-driven-developing",
+]
+VERBS = VERBS + CANDIDATES
+
 FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
