@@ -199,6 +199,14 @@ def apply_selected(mode, url):
         print("  Shows next time Claude Code spins one up.")
 
 
+def current_mode():
+    try:
+        with open(MODE_FILE) as f:
+            return f.read().strip() or "verbs"
+    except FileNotFoundError:
+        return "verbs"
+
+
 def menu():
     """Arrow-key picker shown when run bare in a terminal. Returns the chosen
     mode ('verbs' | 'news') or None if the user quits. Pure stdlib curses."""
@@ -271,6 +279,10 @@ def main():
                    help="spin live wire headlines instead of verbs")
     p.add_argument("--news-url", default=NEWS_URL,
                    help="headline feed URL (or set SPIN_NEWS_URL)")
+    p.add_argument("--set", choices=("verbs", "news", "toggle"),
+                   help="apply a pack to your spinner without the menu")
+    p.add_argument("--status", action="store_true",
+                   help="print the current spinner mode and exit")
     p.add_argument("--selftest", action="store_true", help="run internal check")
     a = p.parse_args()
 
@@ -279,6 +291,15 @@ def main():
         return
     if a.once:
         print(random.choice(VERBS))
+        return
+    if a.status:
+        print(f"spinner mode: {current_mode()}")
+        return
+    if a.set:
+        mode = a.set
+        if mode == "toggle":
+            mode = "verbs" if current_mode() == "news" else "news"
+        apply_selected(mode, a.news_url)
         return
 
     # Explicit mode flags = watch the standalone animation (preview / demo).

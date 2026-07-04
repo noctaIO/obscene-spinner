@@ -24,9 +24,13 @@ The point isn't to watch it spin in a window — it's to drive the spinner Claud
 ./spin.py                 # picker → applies your choice to ~/.claude/settings.json
 ./spin.py --verbs         # just watch the verb animation, ~0.6s each
 ./spin.py --news          # just watch the live-headline animation
+./spin.py --set news      # apply a pack straight away, no menu (verbs|news|toggle)
+./spin.py --status        # which pack is active right now
 ./spin.py --interval 0.3  # faster
 ./spin.py --once          # one verb and quit, handy for status lines
 ```
+
+`--set` is the no-menu path: wire it to a shell alias or a Claude Code `/spinner` command and flip packs in one keystroke.
 
 Picking **profanity** writes the eighty verbs into your `spinnerVerbs`; picking **live news** writes the latest wire headlines and a background poller keeps them fresh. The `--verbs` / `--news` flags don't touch your settings — they just run the standalone animation so you can preview a pack.
 
