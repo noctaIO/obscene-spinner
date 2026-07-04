@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="230" viewBox="0 0 860 230" font-family="SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace">
+  <rect width="860" height="230" rx="12" fill="#0d1117"/>
+  <rect width="860" height="44" rx="12" fill="#161b22"/>
+  <rect y="32" width="860" height="12" fill="#161b22"/>
+  <circle cx="28" cy="22" r="6" fill="#ff5f56"/><circle cx="50" cy="22" r="6" fill="#ffbd2e"/><circle cx="72" cy="22" r="6" fill="#27c93f"/>
+  <text x="430.0" y="27" fill="#7d8590" font-size="14" text-anchor="middle">claude — obscene-spinner</text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠋<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.0000;0.0000;0.1000;0.1000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠙<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.1000;0.1000;0.2000;0.2000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠹<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.2000;0.2000;0.3000;0.3000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠸<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.3000;0.3000;0.4000;0.4000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠼<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.4000;0.4000;0.5000;0.5000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠴<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5000;0.5000;0.6000;0.6000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠦<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.6000;0.6000;0.7000;0.7000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠧<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.7000;0.7000;0.8000;0.8000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠇<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.8000;0.8000;0.9000;0.9000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="138" fill="#3fb950" font-size="30" opacity="0">⠏<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.9000;0.9000;1.0000;1.0000;1" dur="0.90s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">faffing…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.0000;0.0000;0.0833;0.0833;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">unfucking…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.0833;0.0833;0.1667;0.1667;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">yak-shaving…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.1667;0.1667;0.2500;0.2500;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">bikeshedding…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.2500;0.2500;0.3333;0.3333;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">doomscrolling…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.3333;0.3333;0.4167;0.4167;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">footgunning…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.4167;0.4167;0.5000;0.5000;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">yeeting-to-prod…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5000;0.5000;0.5833;0.5833;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">polishing-a-turd…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5833;0.5833;0.6667;0.6667;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">malding…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.6667;0.6667;0.7500;0.7500;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">kludging…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.7500;0.7500;0.8333;0.8333;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">rawdogging…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.8333;0.8333;0.9167;0.9167;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="78" y="138" fill="#e6edf3" font-size="30" opacity="0">crashing-out…<animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.9167;0.9167;1.0000;1.0000;1" dur="8.40s" repeatCount="indefinite" calcMode="linear"/></text>
+  <text x="44" y="178" fill="#7d8590" font-size="16">· 2.1s · 14.2K tok · godel-news AAPL</text>
+</svg>

@@ -1,5 +1,7 @@
 # obscene-spinner
 
+![the spinner cycling through the pack](demo.svg)
+
 Claude Code lets you swap out its spinner verbs. The stock set is whimsical: "Noodling", "Lollygagging", "Shenaniganing". Pleasant. A little pleased with itself.
 
 This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Eighty of them.
@@ -42,5 +44,9 @@ Roughly four moods, because a bad session moves through all of them:
 - **Cope** — malding, seething, huffing-copium, dissociating, crashing-out
 - **Honest engineering** — yak-shaving, bikeshedding, monkeypatching, footgunning, kludging
 - **Do not do this in prod** — yeeting-to-prod, force-pushing-to-main, rm-rf-ing, shipping-and-praying
+
+A single frame, if the animation above won't play in your viewer:
+
+![one frame of the spinner](still.svg)
 
 The stock verbs are fine. But sometimes the honest status really is `bodging`, and the terminal may as well say so.
