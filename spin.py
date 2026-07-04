@@ -117,7 +117,7 @@ def fetch_news(url):
 class NewsFeed:
     """Holds the current headline pool, refreshed by a daemon thread."""
 
-    def __init__(self, url, refresh=60.0):
+    def __init__(self, url, refresh=15.0):
         self.url = url
         self.refresh = refresh
         self.items = fetch_news(url)
