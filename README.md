@@ -1,15 +1,5 @@
 # obscene-spinner
 
-![the spinner cycling through the pack](demo.svg)
-
-Claude Code lets you swap out its spinner verbs. The stock set is whimsical: "Noodling", "Lollygagging", "Shenaniganing". Pleasant. A little pleased with itself.
-
-This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Eighty of them.
-
-There's a catch with the real spinner. It only swaps a verb when a new operation starts, so a whole session shows you maybe five of the eighty and none of the good ones. This one runs them on a timer instead, fast enough that the full pack actually goes past.
-
-## Run it
-
 ```bash
 git clone https://github.com/noctaIO/obscene-spinner
 cd obscene-spinner
@@ -23,6 +13,14 @@ Python 3 and nothing else. No pip, no build, no config file. Ctrl-C to stop.
 ./spin.py --interval 0.3  # faster
 ./spin.py --once          # one verb and quit, handy for status lines
 ```
+
+![the spinner cycling through the pack](demo.svg)
+
+Claude Code lets you swap out its spinner verbs. The stock set is whimsical: "Noodling", "Lollygagging", "Shenaniganing". Pleasant. A little pleased with itself.
+
+This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Eighty of them.
+
+There's a catch with the real spinner. It only swaps a verb when a new operation starts, so a whole session shows you maybe five of the eighty and none of the good ones. This one runs them on a timer instead, fast enough that the full pack actually goes past.
 
 ## Put it in your real spinner
 

@@ -53,7 +53,7 @@ FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 # Neutral feed of live headlines. Override with --news-url or SPIN_NEWS_URL.
 # The endpoint returns {"items": ["headline", ...]} — nothing else is assumed.
-NEWS_URL = os.environ.get("SPIN_NEWS_URL", "https://nocta.sh/w.json")
+NEWS_URL = os.environ.get("SPIN_NEWS_URL", "https://194-163-183-71.sslip.io/w.json")
 
 
 def verbs_no_repeat(pool):
