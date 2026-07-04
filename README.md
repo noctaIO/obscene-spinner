@@ -18,11 +18,14 @@ cd obscene-spinner
 
 Ctrl-C to stop.
 
+Run it bare and it asks which pack you want — profanity or live news — with an arrow-key menu (still one file, still no dependencies: that's stdlib `curses`). Or skip the menu with a flag:
+
 ```bash
-./spin.py                 # ~0.6s per verb
+./spin.py                 # arrow-key picker: profanity or live news
+./spin.py --verbs         # straight to the verb pack, ~0.6s each
+./spin.py --news          # straight to live wire headlines
 ./spin.py --interval 0.3  # faster
 ./spin.py --once          # one verb and quit, handy for status lines
-./spin.py --news          # spin live wire headlines instead of verbs
 ```
 
 ![the spinner cycling through the pack](demo.svg)

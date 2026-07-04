@@ -159,6 +159,40 @@ def spin_news(interval, url):
         feed.stop()
 
 
+def menu():
+    """Arrow-key picker shown when run bare in a terminal. Returns the chosen
+    mode ('verbs' | 'news') or None if the user quits. Pure stdlib curses."""
+    import curses
+
+    options = [
+        ("verbs", "Profanity", "the 2am verb pack, cycled fast"),
+        ("news", "Live news", "spin the latest wire headlines"),
+    ]
+
+    def run(stdscr):
+        curses.curs_set(0)
+        idx = 0
+        while True:
+            stdscr.erase()
+            stdscr.addstr(0, 0, "obscene-spinner")
+            stdscr.addstr(1, 0, "↑/↓ or j/k · Enter to pick · q to quit")
+            for i, (_, name, desc) in enumerate(options):
+                attr = curses.A_REVERSE if i == idx else curses.A_NORMAL
+                stdscr.addstr(3 + i, 2, f" {name:11} {desc} ", attr)
+            stdscr.refresh()
+            k = stdscr.getch()
+            if k in (curses.KEY_UP, ord("k")):
+                idx = (idx - 1) % len(options)
+            elif k in (curses.KEY_DOWN, ord("j")):
+                idx = (idx + 1) % len(options)
+            elif k in (ord("q"), 27):  # q or Esc
+                return None
+            elif k in (curses.KEY_ENTER, 10, 13):
+                return options[idx][0]
+
+    return curses.wrapper(run)
+
+
 def demo():
     # No immediate repeats, and every verb is reachable.
     g = verbs_no_repeat(VERBS)
@@ -180,17 +214,33 @@ def main():
     p.add_argument("--interval", type=float, default=None,
                    help="seconds per item (default 0.6 verbs, 2.5 news)")
     p.add_argument("--once", action="store_true", help="print one verb and exit")
+    p.add_argument("--verbs", action="store_true",
+                   help="spin the verb pack (skip the picker)")
     p.add_argument("--news", action="store_true",
                    help="spin live wire headlines instead of verbs")
     p.add_argument("--news-url", default=NEWS_URL,
                    help="headline feed URL (or set SPIN_NEWS_URL)")
     p.add_argument("--selftest", action="store_true", help="run internal check")
     a = p.parse_args()
+
     if a.selftest:
         demo()
-    elif a.once:
+        return
+    if a.once:
         print(random.choice(VERBS))
-    elif a.news:
+        return
+
+    mode = "news" if a.news else "verbs" if a.verbs else None
+    if mode is None:
+        # Bare run: pick interactively, but stay verbs when piped/non-interactive.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            mode = menu()
+            if mode is None:
+                return
+        else:
+            mode = "verbs"
+
+    if mode == "news":
         spin_news(a.interval if a.interval is not None else 2.5, a.news_url)
     else:
         spin(a.interval if a.interval is not None else 0.6)
