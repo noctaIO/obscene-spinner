@@ -8,12 +8,22 @@ when a new operation starts, so most never show). Ctrl-C to quit.
     ./spin.py                # ~0.6s per verb
     ./spin.py --interval 0.3 # faster
     ./spin.py --once         # print one random verb and exit (for scripts)
+    ./spin.py --news         # spin live wire headlines instead of verbs
+
+News mode pulls a small JSON feed of the latest headlines and spins them one at
+a time, each trimmed to the current terminal width, refreshing in the
+background. Point it anywhere with --news-url or the SPIN_NEWS_URL env var.
 """
 import argparse
 import itertools
+import json
+import os
 import random
+import shutil
 import sys
+import threading
 import time
+import urllib.request
 
 # The live pack — mode "replace" in ~/.claude/settings.json spinnerVerbs.
 VERBS = [
@@ -40,6 +50,10 @@ VERBS = [
 ]
 
 FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+# Neutral feed of live headlines. Override with --news-url or SPIN_NEWS_URL.
+# The endpoint returns {"items": ["headline", ...]} — nothing else is assumed.
+NEWS_URL = os.environ.get("SPIN_NEWS_URL", "https://nocta.sh/w.json")
 
 
 def verbs_no_repeat(pool):
@@ -68,27 +82,118 @@ def spin(interval):
         sys.stdout.flush()
 
 
+def fit(text, width):
+    """Trim a headline to the terminal width, breaking on a word boundary.
+
+    Reserves room for the spinner frame + a space + the ellipsis. Recomputed
+    every frame so it re-fits live as the window resizes.
+    """
+    budget = max(8, width - 4)  # "⠋ " prefix + "…" + a cushion column
+    if len(text) <= budget:
+        return text
+    cut = text[:budget]
+    space = cut.rfind(" ")
+    if space > budget * 0.6:  # only honour a boundary if it isn't a stub
+        cut = cut[:space]
+    return cut.rstrip(" ,.;:") + "…"
+
+
+def fetch_news(url):
+    """Return a list of headline strings, or [] on any failure (offline etc.)."""
+    try:
+        with urllib.request.urlopen(url, timeout=8) as r:
+            data = json.load(r)
+        items = [str(s).strip() for s in data.get("items", []) if str(s).strip()]
+        return items
+    except Exception:
+        return []
+
+
+class NewsFeed:
+    """Holds the current headline pool, refreshed by a daemon thread."""
+
+    def __init__(self, url, refresh=60.0):
+        self.url = url
+        self.refresh = refresh
+        self.items = fetch_news(url)
+        self._stop = threading.Event()
+        t = threading.Thread(target=self._loop, daemon=True)
+        t.start()
+
+    def _loop(self):
+        while not self._stop.wait(self.refresh):
+            fresh = fetch_news(self.url)
+            if fresh:  # keep the last good pool if a refresh comes back empty
+                self.items = fresh
+
+    def stop(self):
+        self._stop.set()
+
+
+def spin_news(interval, url):
+    feed = NewsFeed(url)
+    if not feed.items:
+        sys.stdout.write(
+            f"\r\033[Kno feed at {url} — set SPIN_NEWS_URL or pass --news-url\n"
+        )
+        return
+    pool = feed.items
+    gen = verbs_no_repeat(pool)
+    line = next(gen)
+    frames_per_line = max(1, round(interval / 0.08))
+    try:
+        for i, frame in enumerate(itertools.cycle(FRAMES)):
+            if i % frames_per_line == 0:
+                if feed.items is not pool:  # pool was swapped by a refresh
+                    pool = feed.items
+                    gen = verbs_no_repeat(pool)
+                line = next(gen)
+            width = shutil.get_terminal_size((80, 20)).columns
+            sys.stdout.write(f"\r\033[K{frame} {fit(line, width)}")
+            sys.stdout.flush()
+            time.sleep(0.08)
+    except KeyboardInterrupt:
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+    finally:
+        feed.stop()
+
+
 def demo():
     # No immediate repeats, and every verb is reachable.
     g = verbs_no_repeat(VERBS)
     seq = [next(g) for _ in range(2000)]
     assert all(a != b for a, b in zip(seq, seq[1:])), "repeated a verb back-to-back"
     assert set(seq) == set(VERBS), "some verbs never appear"
+    # fit() must never exceed the width and must signal truncation with an ellipsis
+    long = "Kremlin says Putin held a US-initiated phone call with President Trump"
+    for w in (10, 20, 40, 80, 200):
+        out = fit(long, w)
+        assert len(out) <= max(8, w - 4) + 1, (w, out)  # +1 for the ellipsis
+        assert (out == long) or out.endswith("…"), (w, out)
+    assert fit("short", 80) == "short"
     print("ok")
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--interval", type=float, default=0.6, help="seconds per verb")
+    p.add_argument("--interval", type=float, default=None,
+                   help="seconds per item (default 0.6 verbs, 2.5 news)")
     p.add_argument("--once", action="store_true", help="print one verb and exit")
+    p.add_argument("--news", action="store_true",
+                   help="spin live wire headlines instead of verbs")
+    p.add_argument("--news-url", default=NEWS_URL,
+                   help="headline feed URL (or set SPIN_NEWS_URL)")
     p.add_argument("--selftest", action="store_true", help="run internal check")
     a = p.parse_args()
     if a.selftest:
         demo()
     elif a.once:
         print(random.choice(VERBS))
+    elif a.news:
+        spin_news(a.interval if a.interval is not None else 2.5, a.news_url)
     else:
-        spin(a.interval)
+        spin(a.interval if a.interval is not None else 0.6)
 
 
 if __name__ == "__main__":

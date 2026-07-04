@@ -8,18 +8,7 @@ This is the other set. The one a senior dev mutters at 2am when the build is on 
 
 There's a catch with the real spinner. It only swaps a verb when a new operation starts, so a whole session shows you maybe five of the eighty and none of the good ones. This one runs them on a timer instead, fast enough that the full pack actually goes past.
 
-## Install
-
-Homebrew:
-
-```bash
-brew tap noctaIO/tap
-brew trust noctaio/tap   # newer Homebrew gates third-party taps
-brew install obscene-spinner
-spin
-```
-
-That puts `spin` (and `obscene-spinner`) on your PATH. Or skip Homebrew entirely:
+## Run it
 
 ```bash
 git clone https://github.com/noctaIO/obscene-spinner
@@ -27,7 +16,7 @@ cd obscene-spinner
 ./spin.py
 ```
 
-Python 3 and nothing else. No pip, no config file. Ctrl-C to stop.
+Python 3 and nothing else. No pip, no build, no config file. Ctrl-C to stop.
 
 ```bash
 ./spin.py                 # ~0.6s per verb
