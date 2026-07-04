@@ -12,6 +12,7 @@ Python 3 and nothing else. No pip, no build, no config file. Ctrl-C to stop.
 ./spin.py                 # ~0.6s per verb
 ./spin.py --interval 0.3  # faster
 ./spin.py --once          # one verb and quit, handy for status lines
+./spin.py --news          # spin live wire headlines instead of verbs
 ```
 
 ![the spinner cycling through the pack](demo.svg)
@@ -33,6 +34,18 @@ Drop the pack into `~/.claude/settings.json`:
 ```
 
 The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight across. Fair warning: `"replace"` throws out the polite defaults, so this is not the version you want on screen during a demo.
+
+## News mode
+
+Same spinner, different pack. `--news` swaps the eighty verbs for live wire headlines, one at a time, each trimmed to fit your terminal — recomputed every frame, so it re-fits when you resize the window.
+
+```bash
+./spin.py --news                       # ~2.5s per headline, refreshes in the background
+./spin.py --news --interval 1.2        # faster churn
+./spin.py --news --news-url URL        # or set SPIN_NEWS_URL — any {"items": [...]} JSON
+```
+
+Still Python 3 and nothing else — the feed is fetched with the standard library. It reads a small JSON endpoint (`{"items": ["headline", ...]}`); point it at your own and it'll spin anything you like. No network, no feed? It says so and exits instead of hanging.
 
 ## The verbs
 
