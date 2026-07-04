@@ -1,12 +1,22 @@
 # obscene-spinner
 
 ```bash
+brew tap noctaIO/tap
+brew install obscene-spinner
+spin
+```
+
+That puts `spin` (and `obscene-spinner`) on your PATH. Newer Homebrew gates third-party taps, so if it asks, run `brew trust noctaio/tap` first.
+
+Or skip Homebrew — it's one Python 3 file, no pip, no build, no config:
+
+```bash
 git clone https://github.com/noctaIO/obscene-spinner
 cd obscene-spinner
 ./spin.py
 ```
 
-Python 3 and nothing else. No pip, no build, no config file. Ctrl-C to stop.
+Ctrl-C to stop.
 
 ```bash
 ./spin.py                 # ~0.6s per verb
