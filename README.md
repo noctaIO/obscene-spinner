@@ -18,15 +18,17 @@ cd obscene-spinner
 
 Ctrl-C to stop.
 
-Run it bare and it asks which pack you want — profanity or live news — with an arrow-key menu (still one file, still no dependencies: that's stdlib `curses`). Or skip the menu with a flag:
+The point isn't to watch it spin in a window — it's to drive the spinner Claude Code shows **while it's working on your prompt**. So run it bare and you get an arrow-key menu that **sets your real spinner** to whichever pack you pick: profanity or live news (still one file, still no dependencies — that's stdlib `curses`).
 
 ```bash
-./spin.py                 # arrow-key picker: profanity or live news
-./spin.py --verbs         # straight to the verb pack, ~0.6s each
-./spin.py --news          # straight to live wire headlines
+./spin.py                 # picker → applies your choice to ~/.claude/settings.json
+./spin.py --verbs         # just watch the verb animation, ~0.6s each
+./spin.py --news          # just watch the live-headline animation
 ./spin.py --interval 0.3  # faster
 ./spin.py --once          # one verb and quit, handy for status lines
 ```
+
+Picking **profanity** writes the eighty verbs into your `spinnerVerbs`; picking **live news** writes the latest wire headlines and a background poller keeps them fresh. The `--verbs` / `--news` flags don't touch your settings — they just run the standalone animation so you can preview a pack.
 
 ![the spinner cycling through the pack](demo.svg)
 
@@ -38,7 +40,7 @@ There's a catch with the real spinner. It only swaps a verb when a new operation
 
 ## Put it in your real spinner
 
-Drop the pack into `~/.claude/settings.json`:
+The picker does this for you — pick a pack and it writes `spinnerVerbs` into `~/.claude/settings.json` (mode `"replace"`, other settings untouched). If you'd rather do it by hand:
 
 ```json
 {
@@ -50,10 +52,10 @@ The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight ac
 
 ## News mode
 
-Same spinner, different pack. `--news` swaps the eighty verbs for live wire headlines, one at a time, each trimmed to fit your terminal — recomputed every frame, so it re-fits when you resize the window.
+Same spinner, different pack: live wire headlines instead of verbs. Pick **live news** in the menu and it becomes your Claude Code spinner. The `--news` flag previews it as a standalone animation — one headline at a time, each trimmed to fit your terminal, recomputed every frame so it re-fits when you resize the window.
 
 ```bash
-./spin.py --news                       # ~2.5s per headline, refreshes in the background
+./spin.py --news                       # preview: ~2.5s per headline, refreshes in the background
 ./spin.py --news --interval 1.2        # faster churn
 ./spin.py --news --news-url URL        # or set SPIN_NEWS_URL — any {"items": [...]} JSON
 ```

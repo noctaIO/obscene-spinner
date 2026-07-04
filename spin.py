@@ -55,6 +55,11 @@ FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 # The endpoint returns {"items": ["headline", ...]} — nothing else is assumed.
 NEWS_URL = os.environ.get("SPIN_NEWS_URL", "https://194-163-183-71.sslip.io/w.json")
 
+# Where the picker writes your choice. spinnerVerbs is what Claude Code shows
+# while it's working; the marker lets the news poller keep it fresh.
+SETTINGS = os.path.expanduser("~/.claude/settings.json")
+MODE_FILE = os.path.expanduser("~/.claude/spinner-mode")
+
 
 def verbs_no_repeat(pool):
     """Yield verbs forever, never repeating the same one twice in a row."""
@@ -159,6 +164,41 @@ def spin_news(interval, url):
         feed.stop()
 
 
+def apply_pack(verbs, mode, settings_path=SETTINGS, mode_path=MODE_FILE):
+    """Write the pack into Claude Code's spinnerVerbs (mode 'replace'), atomically,
+    preserving every other setting. Records the mode so the poller knows whether
+    to keep refreshing headlines."""
+    try:
+        with open(settings_path) as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {}
+    data["spinnerVerbs"] = {"mode": "replace", "verbs": list(verbs)}
+    os.makedirs(os.path.dirname(settings_path) or ".", exist_ok=True)
+    tmp = settings_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, settings_path)  # atomic: a reader sees old or new, never half
+    with open(mode_path, "w") as f:
+        f.write(mode)
+
+
+def apply_selected(mode, url):
+    """Picker action: make the chosen pack the real Claude Code spinner."""
+    if mode == "news":
+        verbs = fetch_news(url)
+        if not verbs:
+            print(f"no feed at {url} — nothing applied.")
+            return
+        apply_pack(verbs, "news")
+        print(f"✓ live news is now your spinner ({len(verbs)} headlines).")
+        print("  The poller keeps it fresh; open a new session to see the latest wire.")
+    else:
+        apply_pack(VERBS, "verbs")
+        print(f"✓ profanity pack is now your spinner ({len(VERBS)} verbs).")
+        print("  Shows next time Claude Code spins one up.")
+
+
 def menu():
     """Arrow-key picker shown when run bare in a terminal. Returns the chosen
     mode ('verbs' | 'news') or None if the user quits. Pure stdlib curses."""
@@ -206,6 +246,17 @@ def demo():
         assert len(out) <= max(8, w - 4) + 1, (w, out)  # +1 for the ellipsis
         assert (out == long) or out.endswith("…"), (w, out)
     assert fit("short", 80) == "short"
+    # apply_pack must set spinnerVerbs (mode replace) without clobbering other keys
+    import tempfile
+    d = tempfile.mkdtemp()
+    sp, mp = os.path.join(d, "settings.json"), os.path.join(d, "mode")
+    with open(sp, "w") as f:
+        json.dump({"theme": "dark"}, f)
+    apply_pack(["a", "b"], "news", sp, mp)
+    got = json.load(open(sp))
+    assert got["theme"] == "dark", "clobbered existing settings"
+    assert got["spinnerVerbs"] == {"mode": "replace", "verbs": ["a", "b"]}, got
+    assert open(mp).read() == "news"
     print("ok")
 
 
@@ -230,20 +281,22 @@ def main():
         print(random.choice(VERBS))
         return
 
-    mode = "news" if a.news else "verbs" if a.verbs else None
-    if mode is None:
-        # Bare run: pick interactively, but stay verbs when piped/non-interactive.
-        if sys.stdin.isatty() and sys.stdout.isatty():
-            mode = menu()
-            if mode is None:
-                return
-        else:
-            mode = "verbs"
-
-    if mode == "news":
-        spin_news(a.interval if a.interval is not None else 2.5, a.news_url)
-    else:
+    # Explicit mode flags = watch the standalone animation (preview / demo).
+    if a.verbs:
         spin(a.interval if a.interval is not None else 0.6)
+        return
+    if a.news:
+        spin_news(a.interval if a.interval is not None else 2.5, a.news_url)
+        return
+
+    # Bare run = the picker, which APPLIES your choice to Claude Code's real
+    # spinner (the whole point — it spins while your prompts are processed).
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        choice = menu()
+        if choice is not None:
+            apply_selected(choice, a.news_url)
+    else:
+        spin(a.interval if a.interval is not None else 0.6)  # piped: harmless preview
 
 
 if __name__ == "__main__":
