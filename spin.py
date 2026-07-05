@@ -367,7 +367,7 @@ def demo():
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--interval", type=float, default=None,
-                   help="seconds per item (default 0.6 verbs, 2.5 news)")
+                   help="seconds per item (default 0.6 verbs, 5 news)")
     p.add_argument("--once", action="store_true", help="print one verb and exit")
     p.add_argument("--verbs", action="store_true",
                    help="spin the verb pack (skip the picker)")
@@ -403,7 +403,7 @@ def main():
         spin(a.interval if a.interval is not None else 0.6)
         return
     if a.news:
-        spin_news(a.interval if a.interval is not None else 2.5, a.news_url)
+        spin_news(a.interval if a.interval is not None else 5.0, a.news_url)
         return
 
     # Bare run = the picker, which APPLIES your choice to Claude Code's real

@@ -59,7 +59,7 @@ The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight ac
 Same spinner, different pack: live news headlines instead of verbs. Pick **live news** in the menu and it becomes your Claude Code spinner. Out of the box it reads a live **markets wire** — the top Reuters market stories, refreshed every few minutes — one headline at a time, with the spinner animating on the left.
 
 ```bash
-./spin.py --news                       # preview: ~2.5s per headline, refreshes in the background
+./spin.py --news                       # preview: ~5s per headline, refreshes in the background
 ./spin.py --news --interval 1.2        # faster churn
 ./spin.py --news --news-url URL        # or set SPIN_NEWS_URL — any {"items": [...]} JSON
 ```
