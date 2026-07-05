@@ -98,7 +98,7 @@ def fit(text, width):
         return text
     cut = text[:budget]
     space = cut.rfind(" ")
-    if space > budget * 0.6:  # only honour a boundary if it isn't a stub
+    if space > budget * 0.85:  # break on a word boundary only if it barely shortens
         cut = cut[:space]
     return cut.rstrip(" ,.;:") + "…"
 
@@ -190,6 +190,7 @@ def apply_selected(mode, url):
         if not verbs:
             print(f"no feed at {url} — nothing applied.")
             return
+        verbs = [fit(v, 64) for v in verbs]  # cap so each fits one spinner line
         apply_pack(verbs, "news")
         print(f"✓ live news is now your spinner ({len(verbs)} headlines).")
         print("  The poller keeps it fresh; open a new session to see the latest wire.")
