@@ -161,11 +161,14 @@ def fit(text, width):
         cut_end = i + 1
     cut = text[:cut_end]
 
-    # Fill to the maximum: cut mid-word so every available column is used (the
-    # trailing "…" already signals truncation). Only trim a dangling space or
-    # punctuation so the ellipsis doesn't sit after a space or comma. We used to
-    # snap back to the last whole word, but that wasted up to ~15% of the line.
-    result = cut.rstrip(" ,.;:") + "…"
+    # Prefer a word boundary so the truncated headline is still intelligible.
+    # rfind(' ') returns -1 for CJK/unbreakable text — fall back to the char cut.
+    # ws > 0 (not >= 0): a space at index 0 would produce an empty cut, which is
+    # worse than the character-level result.
+    ws = cut.rfind(' ')
+    if ws > 0:
+        cut = cut[:ws]
+    result = cut.rstrip(" ,.;:—") + "…"
     # Final guarantee: prefix + rendered width never reaches the last column.
     assert PREFIX + disp_width(result) <= width - SAFE, (width, result)
     return result
@@ -214,10 +217,13 @@ def show_summary(item):
     parts = ["\r\033[K\n\033[1m", title, "\033[0m\n\n"]  # bold title, fresh line
     parts.append("\n".join(textwrap.wrap(summary, width)) if summary
                  else "(no summary for this headline)")
-    parts.append("\n\n\033[2m— press any key to resume —\033[0m\n")
+    parts.append("\n\n\033[2m— press n to close —\033[0m\n")
     sys.stdout.write("".join(parts))
     sys.stdout.flush()
-    _read_key(timeout=None)  # block until any key
+    while True:  # wait specifically for 'n', not just any key
+        k = _read_key(timeout=None)
+        if k and k.lower() == "n":
+            break
 
 
 class NewsFeed:
@@ -262,7 +268,6 @@ def spin_news(interval, url):
         fd = sys.stdin.fileno()
         old_term = termios.tcgetattr(fd)
         tty.setcbreak(fd)
-        sys.stdout.write("\033[2m[n] read summary   [q] quit\033[0m\n")
 
     try:
         for i, frame in enumerate(itertools.cycle(FRAMES)):
@@ -275,7 +280,18 @@ def spin_news(interval, url):
                     gen = shuffle_bag(list(current))
                 line = next(gen)
             width = shutil.get_terminal_size((80, 20)).columns
-            sys.stdout.write(f"\r\033[K{frame} {fit(line['title'], width)}")
+            if interactive:
+                # Two-line display: ticker on the current line, status bar below.
+                # After writing both lines, \033[1A moves the cursor back up to the
+                # ticker row so the next frame can overwrite cleanly from the same
+                # position.  \r resets the column regardless of where we ended up.
+                hint = "\033[2m[n] summary  [q] quit\033[0m"  # two spaces for visual breathing room
+                sys.stdout.write(
+                    f"\r\033[K{frame} {fit(line['title'], width)}"
+                    f"\n\r\033[K{hint}\033[1A"
+                )
+            else:
+                sys.stdout.write(f"\r\033[K{frame} {fit(line['title'], width)}")
             sys.stdout.flush()
             time.sleep(0.08)
             if interactive:
@@ -291,7 +307,9 @@ def spin_news(interval, url):
             import termios
             termios.tcsetattr(fd, termios.TCSADRAIN, old_term)
         feed.stop()
-        sys.stdout.write("\r\033[K")
+        # Clear both lines (ticker + status bar) so the prompt is left clean:
+        # go to col 0 on ticker line, erase it, step down, erase status bar, step back up.
+        sys.stdout.write("\r\033[K\n\r\033[K\033[1A")
         sys.stdout.flush()
 
 
