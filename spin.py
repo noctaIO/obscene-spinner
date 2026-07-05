@@ -61,18 +61,25 @@ SETTINGS = os.path.expanduser("~/.claude/settings.json")
 MODE_FILE = os.path.expanduser("~/.claude/spinner-mode")
 
 
-def verbs_no_repeat(pool):
-    """Yield verbs forever, never repeating the same one twice in a row."""
+def shuffle_bag(pool):
+    """Yield items forever in reshuffled order, dealing the WHOLE pool before any
+    repeat (like a deck of cards, not a die roll). random.choice would resample
+    with replacement, so a 50-item feed still felt like the same handful over and
+    over; this guarantees you see every item once per cycle. Also avoids a repeat
+    at the reshuffle seam."""
     last = None
     while True:
-        v = random.choice(pool)
-        if v != last or len(pool) == 1:
-            last = v
-            yield v
+        bag = list(pool)
+        random.shuffle(bag)
+        if last is not None and len(bag) > 1 and bag[0] == last:
+            bag.append(bag.pop(0))  # don't repeat across the shuffle boundary
+        for item in bag:
+            last = item
+            yield item
 
 
 def spin(interval):
-    verbs = verbs_no_repeat(VERBS)
+    verbs = shuffle_bag(VERBS)
     verb = next(verbs)
     frames_per_verb = max(1, round(interval / 0.08))
     try:
@@ -142,16 +149,21 @@ def spin_news(interval, url):
             f"\r\033[Kno feed at {url} — set SPIN_NEWS_URL or pass --news-url\n"
         )
         return
-    pool = feed.items
-    gen = verbs_no_repeat(pool)
+    snapshot = tuple(feed.items)
+    gen = shuffle_bag(list(snapshot))
     line = next(gen)
     frames_per_line = max(1, round(interval / 0.08))
     try:
         for i, frame in enumerate(itertools.cycle(FRAMES)):
             if i % frames_per_line == 0:
-                if feed.items is not pool:  # pool was swapped by a refresh
-                    pool = feed.items
-                    gen = verbs_no_repeat(pool)
+                current = tuple(feed.items)
+                # Only rebuild the deck when the headlines ACTUALLY changed.
+                # (The old code compared object identity, so every 15s refresh —
+                # even with identical content — reset the deck and re-showed the
+                # same few headlines. Compare by value instead.)
+                if current and current != snapshot:
+                    snapshot = current
+                    gen = shuffle_bag(list(current))
                 line = next(gen)
             width = shutil.get_terminal_size((80, 20)).columns
             sys.stdout.write(f"\r\033[K{frame} {fit(line, width)}")
@@ -243,11 +255,16 @@ def menu():
 
 
 def demo():
-    # No immediate repeats, and every verb is reachable.
-    g = verbs_no_repeat(VERBS)
+    # Shuffle bag: no back-to-back repeats, every verb reachable, and — the whole
+    # point of the fix — a full cycle of length N shows every verb exactly once
+    # before any repeat.
+    g = shuffle_bag(VERBS)
     seq = [next(g) for _ in range(2000)]
     assert all(a != b for a, b in zip(seq, seq[1:])), "repeated a verb back-to-back"
     assert set(seq) == set(VERBS), "some verbs never appear"
+    n = len(VERBS)
+    assert len(set(seq[:n])) == n, "first full cycle must show every verb once"
+    assert len(set(seq[n:2 * n])) == n, "second cycle must also be a full sweep"
     # fit() must never exceed the width and must signal truncation with an ellipsis
     long = "Kremlin says Putin held a US-initiated phone call with President Trump"
     for w in (10, 20, 40, 80, 200):
