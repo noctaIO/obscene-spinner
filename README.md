@@ -64,6 +64,8 @@ Same spinner, different pack: live news headlines instead of verbs. Pick **live 
 ./spin.py --news --news-url URL        # or set SPIN_NEWS_URL — any {"items": [...]} JSON
 ```
 
+**Read the story:** while the ticker runs, press `n` to pause and read the current headline's summary, then any key to resume (`q` quits). One catch — the summary only works in this standalone ticker, not in Claude Code's own spinner, which Claude Code draws itself.
+
 Each headline is measured by real screen width — Chinese text and emoji count as two columns, accents as zero — then filled right to the edge and capped with `…`, recomputed every frame. So it never overflows or wraps, packs the line tight, and re-fits the instant you resize. Headlines are reshuffled like a deck, so you see the whole feed before any repeat.
 
 Still Python 3 and nothing else — the feed is fetched with the standard library. The default is the markets wire, but point `--news-url` (or `SPIN_NEWS_URL`) at any small JSON endpoint shaped like `{"items": ["headline", ...]}` and it'll spin whatever you feed it. No network, no feed? It says so and exits instead of hanging.

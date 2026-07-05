@@ -13,6 +13,7 @@ when a new operation starts, so most never show). Ctrl-C to quit.
 News mode pulls a small JSON feed of the latest headlines and spins them one at
 a time, each trimmed to the current terminal width, refreshing in the
 background. Point it anywhere with --news-url or the SPIN_NEWS_URL env var.
+In the news ticker press n to read the current story's summary, q to quit.
 """
 import argparse
 import itertools
@@ -21,6 +22,7 @@ import os
 import random
 import shutil
 import sys
+import textwrap
 import threading
 import time
 import unicodedata
@@ -169,15 +171,53 @@ def fit(text, width):
     return result
 
 
+def normalize_items(raw):
+    """Normalise feed items to [{title, summary}]. Accepts plain strings (the
+    world feed) or {title/summary/description} objects (the markets feed carries
+    a summary so the ticker can show it when you press n). Drops empty titles."""
+    out = []
+    for it in raw or []:
+        if isinstance(it, dict):
+            title = str(it.get("title", "")).strip()
+            summary = str(it.get("summary") or it.get("description") or "").strip()
+        else:
+            title, summary = str(it).strip(), ""
+        if title:
+            out.append({"title": title, "summary": summary or None})
+    return out
+
+
 def fetch_news(url):
-    """Return a list of headline strings, or [] on any failure (offline etc.)."""
+    """Return a list of {title, summary} dicts, or [] on any failure (offline)."""
     try:
         with urllib.request.urlopen(url, timeout=8) as r:
             data = json.load(r)
-        items = [str(s).strip() for s in data.get("items", []) if str(s).strip()]
-        return items
+        return normalize_items(data.get("items", []))
     except Exception:
         return []
+
+
+def _read_key(timeout=0):
+    """One keystroke if one is waiting (non-blocking when timeout=0, blocking when
+    timeout=None), else None. Only valid while the terminal is in cbreak mode."""
+    import select
+    if timeout is None or select.select([sys.stdin], [], [], timeout)[0]:
+        return sys.stdin.read(1)
+    return None
+
+
+def show_summary(item):
+    """Pause the ticker and print the current story's summary; wait for a key."""
+    title = item.get("title", "")
+    summary = item.get("summary")
+    width = min(shutil.get_terminal_size((80, 20)).columns, 100)
+    parts = ["\r\033[K\n\033[1m", title, "\033[0m\n\n"]  # bold title, fresh line
+    parts.append("\n".join(textwrap.wrap(summary, width)) if summary
+                 else "(no summary for this headline)")
+    parts.append("\n\n\033[2m— press any key to resume —\033[0m\n")
+    sys.stdout.write("".join(parts))
+    sys.stdout.flush()
+    _read_key(timeout=None)  # block until any key
 
 
 class NewsFeed:
@@ -212,27 +252,47 @@ def spin_news(interval, url):
     gen = shuffle_bag(list(snapshot))
     line = next(gen)
     frames_per_line = max(1, round(interval / 0.08))
+
+    # Interactive keys only work on a real terminal. cbreak mode lets us read one
+    # keystroke at a time without waiting for Enter, and leaves Ctrl-C working.
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    old_term = fd = None
+    if interactive:
+        import termios, tty
+        fd = sys.stdin.fileno()
+        old_term = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+        sys.stdout.write("\033[2m[n] read summary   [q] quit\033[0m\n")
+
     try:
         for i, frame in enumerate(itertools.cycle(FRAMES)):
             if i % frames_per_line == 0:
                 current = tuple(feed.items)
-                # Only rebuild the deck when the headlines ACTUALLY changed.
-                # (The old code compared object identity, so every 15s refresh —
-                # even with identical content — reset the deck and re-showed the
-                # same few headlines. Compare by value instead.)
+                # Rebuild the deck only when the headlines ACTUALLY changed
+                # (compare by value, not identity, or every refresh resets it).
                 if current and current != snapshot:
                     snapshot = current
                     gen = shuffle_bag(list(current))
                 line = next(gen)
             width = shutil.get_terminal_size((80, 20)).columns
-            sys.stdout.write(f"\r\033[K{frame} {fit(line, width)}")
+            sys.stdout.write(f"\r\033[K{frame} {fit(line['title'], width)}")
             sys.stdout.flush()
             time.sleep(0.08)
+            if interactive:
+                key = _read_key()
+                if key in ("n", "N"):
+                    show_summary(line)
+                elif key in ("q", "Q", "\x1b"):  # q or Esc
+                    break
     except KeyboardInterrupt:
+        pass
+    finally:
+        if old_term is not None:
+            import termios
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_term)
+        feed.stop()
         sys.stdout.write("\r\033[K")
         sys.stdout.flush()
-    finally:
-        feed.stop()
 
 
 def apply_pack(verbs, mode, settings_path=SETTINGS, mode_path=MODE_FILE):
@@ -261,7 +321,7 @@ def apply_selected(mode, url):
         if not verbs:
             print(f"no feed at {url} — nothing applied.")
             return
-        verbs = [fit(v, 64) for v in verbs]  # cap so each fits one spinner line
+        verbs = [fit(v["title"], 64) for v in verbs]  # titles only, one line each
         apply_pack(verbs, "news")
         print(f"✓ live news is now your spinner ({len(verbs)} headlines).")
         print("  The poller keeps it fresh; open a new session to see the latest wire.")
@@ -361,6 +421,13 @@ def demo():
     assert got["theme"] == "dark", "clobbered existing settings"
     assert got["spinnerVerbs"] == {"mode": "replace", "verbs": ["a", "b"]}, got
     assert open(mp).read() == "news"
+    # normalize_items accepts plain strings AND {title, summary/description} dicts
+    assert normalize_items(["a", "b"]) == [
+        {"title": "a", "summary": None}, {"title": "b", "summary": None}]
+    assert normalize_items([{"title": "T", "summary": "S"}]) == [
+        {"title": "T", "summary": "S"}]
+    assert normalize_items([{"title": "T", "description": "D"}])[0]["summary"] == "D"
+    assert normalize_items([{"title": ""}, "  "]) == []  # drops empty titles
     print("ok")
 
 
@@ -372,7 +439,7 @@ def main():
     p.add_argument("--verbs", action="store_true",
                    help="spin the verb pack (skip the picker)")
     p.add_argument("--news", action="store_true",
-                   help="spin live wire headlines instead of verbs")
+                   help="spin live headlines (press n to read a summary)")
     p.add_argument("--news-url", default=NEWS_URL,
                    help="headline feed URL (or set SPIN_NEWS_URL)")
     p.add_argument("--set", choices=("verbs", "news", "toggle"),
