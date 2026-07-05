@@ -23,6 +23,7 @@ import shutil
 import sys
 import threading
 import time
+import unicodedata
 import urllib.request
 
 # The live pack — mode "replace" in ~/.claude/settings.json spinnerVerbs.
@@ -53,7 +54,9 @@ FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 # Neutral feed of live headlines. Override with --news-url or SPIN_NEWS_URL.
 # The endpoint returns {"items": ["headline", ...]} — nothing else is assumed.
-NEWS_URL = os.environ.get("SPIN_NEWS_URL", "https://194-163-183-71.sslip.io/w.json")
+NEWS_URL = os.environ.get(
+    "SPIN_NEWS_URL", "https://194-163-183-71.sslip.io/markets.json"
+)
 
 # Where the picker writes your choice. spinnerVerbs is what Claude Code shows
 # while it's working; the marker lets the news poller keep it fresh.
@@ -94,20 +97,80 @@ def spin(interval):
         sys.stdout.flush()
 
 
-def fit(text, width):
-    """Trim a headline to the terminal width, breaking on a word boundary.
+def char_width(ch):
+    """Terminal COLUMNS one character occupies (not codepoints).
 
-    Reserves room for the spinner frame + a space + the ellipsis. Recomputed
-    every frame so it re-fits live as the window resizes.
+    A terminal lays out cells, not codepoints, so len() is the wrong ruler:
+    - Combining marks (é as e + U+0301) attach to the previous cell -> 0 cols.
+    - Control/format chars (category Cc/Cf, e.g. U+200B zero-width space) -> 0.
+    - East-Asian Wide/Fullwidth (CJK, most emoji, fullwidth digits) -> 2 cols.
+    - Everything else -> 1 col.
     """
-    budget = max(8, width - 4)  # "⠋ " prefix + "…" + a cushion column
-    if len(text) <= budget:
+    if unicodedata.combining(ch):
+        return 0
+    if unicodedata.category(ch) in ("Cc", "Cf", "Mn", "Me"):
+        return 0
+    if unicodedata.east_asian_width(ch) in ("W", "F"):
+        return 2
+    return 1
+
+
+def disp_width(s):
+    """Rendered column width of a string (sum of per-char cell widths)."""
+    return sum(char_width(c) for c in s)
+
+
+def fit(text, width):
+    """Trim a headline to the terminal width by DISPLAY columns, not codepoints.
+
+    The caller prints "{frame} {fit(text, width)}", so a fixed 2-column prefix
+    (spinner glyph + space) sits to the left. We reserve that prefix, one column
+    for the trailing ellipsis, and one final safety column so a full line never
+    lands in the last cell (which triggers terminal auto-wrap). The guarantee is:
+
+        2 (prefix) + disp_width(fit(text, width)) <= width - 1
+
+    Recomputed every frame so it re-fits live as the window resizes. CJK, emoji
+    and NFD-decomposed accents are all measured in real columns, so wide feeds no
+    longer overflow and accented Latin no longer under-fills.
+    """
+    PREFIX = 2       # "{frame} " -> spinner glyph (1 col) + space (1 col)
+    ELLIPSIS = 1     # "…" is a single column
+    SAFE = 1         # never write the final column -> avoid auto-wrap
+    budget = max(1, width - PREFIX - SAFE)  # columns available to the text region
+
+    if disp_width(text) <= budget:
         return text
-    cut = text[:budget]
+
+    # Reserve the ellipsis, then walk accumulating real column widths.
+    keep_budget = budget - ELLIPSIS
+    kept_cols = 0
+    cut_end = 0
+    for i, ch in enumerate(text):
+        w = char_width(ch)
+        if w == 0:
+            # Combining mark: attaches to the char we just kept, costs nothing.
+            # Keep it so we don't strip an accent off its base letter.
+            cut_end = i + 1
+            continue
+        if kept_cols + w > keep_budget:
+            break
+        kept_cols += w
+        cut_end = i + 1
+    cut = text[:cut_end]
+
+    # Width-aware word-boundary break: only snap back to a space if it barely
+    # shortens the KEPT columns. For CJK (no spaces) this is a no-op.
     space = cut.rfind(" ")
-    if space > budget * 0.85:  # break on a word boundary only if it barely shortens
-        cut = cut[:space]
-    return cut.rstrip(" ,.;:") + "…"
+    if space > 0:
+        removed_cols = disp_width(cut[space:])
+        if removed_cols <= 0.15 * keep_budget:
+            cut = cut[:space]
+
+    result = cut.rstrip(" ,.;:") + "…"
+    # Final guarantee: prefix + rendered width never reaches the last column.
+    assert PREFIX + disp_width(result) <= width - SAFE, (width, result)
+    return result
 
 
 def fetch_news(url):
@@ -265,12 +328,31 @@ def demo():
     n = len(VERBS)
     assert len(set(seq[:n])) == n, "first full cycle must show every verb once"
     assert len(set(seq[n:2 * n])) == n, "second cycle must also be a full sweep"
-    # fit() must never exceed the width and must signal truncation with an ellipsis
-    long = "Kremlin says Putin held a US-initiated phone call with President Trump"
-    for w in (10, 20, 40, 80, 200):
-        out = fit(long, w)
-        assert len(out) <= max(8, w - 4) + 1, (w, out)  # +1 for the ellipsis
-        assert (out == long) or out.endswith("…"), (w, out)
+    # fit() must never overflow: the rendered "{frame} {fit(text,w)}" line must
+    # fit in width-1 columns (last cell left blank to dodge auto-wrap), measured
+    # in DISPLAY columns. Exercise the wide-char (CJK/emoji), NFD-combining, and
+    # unbreakable-word paths — the codepoint model got all of these wrong.
+    import unicodedata as _ud
+    headlines = [
+        # long ASCII with plenty of word boundaries
+        "Kremlin says Putin held a US-initiated phone call with President Trump today",
+        # CJK: every glyph is 2 columns, no spaces to break on
+        "中国A股上证指数创下新高投资者观望美联储利率决议",
+        # emoji (width-2) mixed into ASCII
+        "Markets rip higher 🚀 as the Fed signals a surprise pause on rate hikes",
+        # NFD-decomposed accents: café/señor as base + combining mark
+        _ud.normalize("NFD", "Café señor naïve résumé façade — accented world news roundup"),
+        # single unbreakable 120-char word: no space anywhere to snap to
+        "x" * 120,
+    ]
+    for text in headlines:
+        for w in (6, 8, 10, 20, 40, 80, 120, 200):
+            out = fit(text, w)
+            line = f"{FRAMES[0]} {out}"
+            assert disp_width(line) <= w - 1, (w, repr(text), repr(out),
+                                               disp_width(line))
+            if out != text:
+                assert out.endswith("…"), (w, repr(text), repr(out))
     assert fit("short", 80) == "short"
     # apply_pack must set spinnerVerbs (mode replace) without clobbering other keys
     import tempfile
