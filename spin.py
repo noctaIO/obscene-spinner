@@ -159,14 +159,10 @@ def fit(text, width):
         cut_end = i + 1
     cut = text[:cut_end]
 
-    # Width-aware word-boundary break: only snap back to a space if it barely
-    # shortens the KEPT columns. For CJK (no spaces) this is a no-op.
-    space = cut.rfind(" ")
-    if space > 0:
-        removed_cols = disp_width(cut[space:])
-        if removed_cols <= 0.15 * keep_budget:
-            cut = cut[:space]
-
+    # Fill to the maximum: cut mid-word so every available column is used (the
+    # trailing "…" already signals truncation). Only trim a dangling space or
+    # punctuation so the ellipsis doesn't sit after a space or comma. We used to
+    # snap back to the last whole word, but that wasted up to ~15% of the line.
     result = cut.rstrip(" ,.;:") + "…"
     # Final guarantee: prefix + rendered width never reaches the last column.
     assert PREFIX + disp_width(result) <= width - SAFE, (width, result)
