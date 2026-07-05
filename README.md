@@ -32,7 +32,7 @@ The point isn't to watch it spin in a window — it's to drive the spinner Claud
 
 `--set` is the no-menu path: wire it to a shell alias or a Claude Code `/spinner` command and flip packs in one keystroke.
 
-Picking **profanity** writes the eighty verbs into your `spinnerVerbs`; picking **live news** writes the latest wire headlines and a background poller keeps them fresh. The `--verbs` / `--news` flags don't touch your settings — they just run the standalone animation so you can preview a pack.
+Picking **profanity** writes the eighty verbs into your `spinnerVerbs`; picking **live news** writes the latest markets headlines and a background poller keeps them fresh. The `--verbs` / `--news` flags don't touch your settings — they just run the standalone animation so you can preview a pack.
 
 ![the spinner cycling through the pack](demo.svg)
 
@@ -56,7 +56,7 @@ The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight ac
 
 ## News mode
 
-Same spinner, different pack: live wire headlines instead of verbs. Pick **live news** in the menu and it becomes your Claude Code spinner. The `--news` flag previews it as a standalone animation — one headline at a time, each trimmed to fit your terminal, recomputed every frame so it re-fits when you resize the window.
+Same spinner, different pack: live news headlines instead of verbs. Pick **live news** in the menu and it becomes your Claude Code spinner. Out of the box it reads a live **markets wire** — the top Reuters market stories, refreshed every few minutes — one headline at a time, with the spinner animating on the left.
 
 ```bash
 ./spin.py --news                       # preview: ~2.5s per headline, refreshes in the background
@@ -64,7 +64,9 @@ Same spinner, different pack: live wire headlines instead of verbs. Pick **live 
 ./spin.py --news --news-url URL        # or set SPIN_NEWS_URL — any {"items": [...]} JSON
 ```
 
-Still Python 3 and nothing else — the feed is fetched with the standard library. It reads a small JSON endpoint (`{"items": ["headline", ...]}`); point it at your own and it'll spin anything you like. No network, no feed? It says so and exits instead of hanging.
+Each headline is measured by real screen width — Chinese text and emoji count as two columns, accents as zero — then filled right to the edge and capped with `…`, recomputed every frame. So it never overflows or wraps, packs the line tight, and re-fits the instant you resize. Headlines are reshuffled like a deck, so you see the whole feed before any repeat.
+
+Still Python 3 and nothing else — the feed is fetched with the standard library. The default is the markets wire, but point `--news-url` (or `SPIN_NEWS_URL`) at any small JSON endpoint shaped like `{"items": ["headline", ...]}` and it'll spin whatever you feed it. No network, no feed? It says so and exits instead of hanging.
 
 ## The verbs
 
