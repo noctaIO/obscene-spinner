@@ -52,7 +52,7 @@ The picker does this for you — pick a pack and it writes `spinnerVerbs` into `
 }
 ```
 
-The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight across. Fair warning: `"replace"` throws out the polite defaults, so this is not the version you want on screen during a demo.
+The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight across. The left-hand spinner glyph animations are in `PLAINTEXT_ANIMATIONS` (same file) if you want to reuse those too. Fair warning: `"replace"` throws out the polite defaults, so this is not the version you want on screen during a demo.
 
 ## News mode
 

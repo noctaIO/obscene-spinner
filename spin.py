@@ -52,7 +52,18 @@ VERBS = [
     "crashing-out", "overthinking", "regretting", "guessing",
 ]
 
-FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+# Plain-text frame packs for the glyph shown to the left of the spinning verb.
+# Kept to single-column characters so width guarantees in fit() stay true.
+PLAINTEXT_ANIMATIONS = [
+    "|/-\\",
+    ".oO@*",
+    "<^>v",
+    "qQpP",
+    ".,:;!",
+    "`'^~",
+    "xo+*",
+    "_-~=^",
+]
 
 # Neutral feed of live headlines. Override with --news-url or SPIN_NEWS_URL.
 # The endpoint returns {"items": ["headline", ...]} — nothing else is assumed.
@@ -86,9 +97,10 @@ def shuffle_bag(pool):
 def spin(interval):
     verbs = shuffle_bag(VERBS)
     verb = next(verbs)
+    frames = random.choice(PLAINTEXT_ANIMATIONS)
     frames_per_verb = max(1, round(interval / 0.08))
     try:
-        for i, frame in enumerate(itertools.cycle(FRAMES)):
+        for i, frame in enumerate(itertools.cycle(frames)):
             if i % frames_per_verb == 0:
                 verb = next(verbs)
             sys.stdout.write(f"\r\033[K{frame} {verb}… ")
@@ -251,6 +263,7 @@ def spin_news(interval, url):
     snapshot = tuple(feed.items)
     gen = shuffle_bag(list(snapshot))
     line = next(gen)
+    frames = random.choice(PLAINTEXT_ANIMATIONS)
     frames_per_line = max(1, round(interval / 0.08))
 
     # Interactive keys only work on a real terminal. cbreak mode lets us read one
@@ -265,7 +278,7 @@ def spin_news(interval, url):
         sys.stdout.write("\033[2m[n] read summary   [q] quit\033[0m\n")
 
     try:
-        for i, frame in enumerate(itertools.cycle(FRAMES)):
+        for i, frame in enumerate(itertools.cycle(frames)):
             if i % frames_per_line == 0:
                 current = tuple(feed.items)
                 # Rebuild the deck only when the headlines ACTUALLY changed
@@ -384,6 +397,13 @@ def demo():
     n = len(VERBS)
     assert len(set(seq[:n])) == n, "first full cycle must show every verb once"
     assert len(set(seq[n:2 * n])) == n, "second cycle must also be a full sweep"
+    # Animation packs should be usable as one-cell spinner glyphs.
+    assert PLAINTEXT_ANIMATIONS, "need at least one animation pack"
+    for frames in PLAINTEXT_ANIMATIONS:
+        assert len(frames) >= 2, f"too short animation pack: {frames!r}"
+        assert all(char_width(ch) == 1 for ch in frames), (
+            f"multi-column frame in pack: {frames!r}"
+        )
     # fit() must never overflow: the rendered "{frame} {fit(text,w)}" line must
     # fit in width-1 columns (last cell left blank to dodge auto-wrap), measured
     # in DISPLAY columns. Exercise the wide-char (CJK/emoji), NFD-combining, and
@@ -404,7 +424,7 @@ def demo():
     for text in headlines:
         for w in (6, 8, 10, 20, 40, 80, 120, 200):
             out = fit(text, w)
-            line = f"{FRAMES[0]} {out}"
+            line = f"{PLAINTEXT_ANIMATIONS[0][0]} {out}"
             assert disp_width(line) <= w - 1, (w, repr(text), repr(out),
                                                disp_width(line))
             if out != text:
