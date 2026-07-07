@@ -75,6 +75,26 @@ NEWS_URL = os.environ.get(
 # while it's working; the marker lets the news poller keep it fresh.
 SETTINGS = os.path.expanduser("~/.claude/settings.json")
 MODE_FILE = os.path.expanduser("~/.claude/spinner-mode")
+# Full-text feed cache the statusLine marquee (newscrawl.js) reads. spinnerVerbs
+# only holds truncated titles; this keeps titles + summaries so the status-line
+# ticker can scroll the whole story. Same JSON shape newscrawl.js writes.
+NEWS_CACHE = os.path.expanduser("~/.claude/spinner-news-cache.json")
+
+
+def write_news_cache(items, url, cache_path=NEWS_CACHE):
+    """Write the full feed (titles + summaries) to the marquee cache, atomically.
+    `items` is the [{title, summary}] list from fetch_news()."""
+    record = {
+        "items": [{"title": it["title"], "summary": it.get("summary") or ""}
+                  for it in items],
+        "ts": int(time.time() * 1000),  # ms, so JS Date.now() math lines up
+        "url": url,
+    }
+    os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
+    tmp = cache_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(record, f, ensure_ascii=False)
+    os.replace(tmp, cache_path)  # atomic: reader sees old or new, never half
 
 
 def shuffle_bag(pool):
@@ -330,17 +350,26 @@ def apply_pack(verbs, mode, settings_path=SETTINGS, mode_path=MODE_FILE):
 def apply_selected(mode, url):
     """Picker action: make the chosen pack the real Claude Code spinner."""
     if mode == "news":
-        verbs = fetch_news(url)
-        if not verbs:
+        items = fetch_news(url)
+        if not items:
             print(f"no feed at {url} — nothing applied.")
             return
-        verbs = [fit(v["title"], 64) for v in verbs]  # titles only, one line each
+        write_news_cache(items, url)  # full titles+summaries for the statusLine marquee
+        verbs = [fit(v["title"], 64) for v in items]  # titles only, one line each
+        random.shuffle(verbs)  # vary the order so new sessions/tabs don't all
+                               # open on the same first few headlines (see below)
         apply_pack(verbs, "news")
         print(f"✓ live news is now your spinner ({len(verbs)} headlines).")
         print("  The poller keeps it fresh; open a new session to see the latest wire.")
     else:
-        apply_pack(VERBS, "verbs")
-        print(f"✓ profanity pack is now your spinner ({len(VERBS)} verbs).")
+        # Shuffle a copy so the written order differs each apply. Claude Code
+        # shows only a handful of verbs per session; without this, every new
+        # session/tab tends to surface the SAME opening verbs. A fresh shuffle
+        # per apply spreads which ones you see across sessions.
+        verbs = list(VERBS)
+        random.shuffle(verbs)
+        apply_pack(verbs, "verbs")
+        print(f"✓ profanity pack is now your spinner ({len(verbs)} verbs).")
         print("  Shows next time Claude Code spins one up.")
 
 
@@ -452,6 +481,14 @@ def demo():
 
 
 def main():
+    # Windows consoles default to cp1252, which can't encode the spinner glyphs,
+    # emoji, or the ✓ we print. Force UTF-8 so output never crashes cross-platform.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--interval", type=float, default=None,
                    help="seconds per item (default 0.6 verbs, 5 news)")
@@ -464,6 +501,9 @@ def main():
                    help="headline feed URL (or set SPIN_NEWS_URL)")
     p.add_argument("--set", choices=("verbs", "news", "toggle"),
                    help="apply a pack to your spinner without the menu")
+    p.add_argument("--refresh-cache", action="store_true",
+                   help="fetch the feed and update the statusLine marquee cache "
+                        "(no settings changed) — wire to a scheduler to stay fresh")
     p.add_argument("--status", action="store_true",
                    help="print the current spinner mode and exit")
     p.add_argument("--selftest", action="store_true", help="run internal check")
@@ -474,6 +514,14 @@ def main():
         return
     if a.once:
         print(random.choice(VERBS))
+        return
+    if a.refresh_cache:
+        items = fetch_news(a.news_url)
+        if not items:
+            print(f"no feed at {a.news_url} — cache unchanged.")
+            return
+        write_news_cache(items, a.news_url)
+        print(f"✓ refreshed marquee cache ({len(items)} items) -> {NEWS_CACHE}")
         return
     if a.status:
         print(f"spinner mode: {current_mode()}")

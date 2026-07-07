@@ -70,6 +70,48 @@ Each headline is measured by real screen width — Chinese text and emoji count 
 
 Still Python 3 and nothing else — the feed is fetched with the standard library. The default is the markets wire, but point `--news-url` (or `SPIN_NEWS_URL`) at any small JSON endpoint shaped like `{"items": ["headline", ...]}` and it'll spin whatever you feed it. No network, no feed? It says so and exits instead of hanging.
 
+## Status-line news marquee
+
+The spinner has a catch for news: Claude Code only swaps the spinner verb when a
+new operation starts, so a headline can sit frozen for a long quiet wait — it
+never "continues the story." The status line doesn't have that limit. `spin.py`
+writes the full feed (titles **and** summaries) to a cache, and
+[`newscrawl.js`](newscrawl.js) renders it as a horizontally-scrolling ticker you
+can drop into Claude Code's `statusLine`.
+
+```jsonc
+// ~/.claude/settings.json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node /path/to/obscene-spinner/newscrawl.js --render"
+  }
+}
+```
+
+The scroll position is derived from wall-clock time (`offset = floor(now/step)`),
+not a saved counter. Claude Code re-invokes the status-line command on its own
+(irregular) schedule and re-spawns it fresh each time — deriving the frame from
+the clock means every invocation independently draws the correct frame for
+"now", so an irregular cadence just lowers the framerate, it never desyncs the
+crawl. The renderer is a pure reader: it never touches the network, so it stays
+well under the status-line timeout.
+
+Keep the cache fresh with a scheduler (the renderer never fetches):
+
+```bash
+spin.py --refresh-cache          # fetch feed -> cache, no settings touched
+# then run it on a timer, e.g. cron:  */3 * * * *  spin.py --refresh-cache
+# Windows Task Scheduler:  schtasks /create /tn obscene-spinner-news \
+#   /tr "py C:\path\spin.py --refresh-cache" /sc minute /mo 3
+```
+
+Tuning (env vars, read by `newscrawl.js` / the status-line reader):
+`SPIN_STATUS_WIDTH` (visible columns, default 44), `SPIN_STATUS_STEP_MS`
+(ms per column, default 250), `SPIN_STATUS_MAX_AGE_MS` (hide news older than
+this, default 30 min), `SPIN_STATUS_NEWS=0` to disable. Watch it live with
+`node newscrawl.js --demo`.
+
 ## The verbs
 
 Roughly four moods, because a bad session moves through all of them:
