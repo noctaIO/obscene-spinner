@@ -20,6 +20,7 @@ import itertools
 import json
 import os
 import random
+import re
 import shutil
 import sys
 import textwrap
@@ -169,6 +170,92 @@ def fit(text, width):
     # Final guarantee: prefix + rendered width never reaches the last column.
     assert PREFIX + disp_width(result) <= width - SAFE, (width, result)
     return result
+
+
+# Claude Code renders the spinner verb line at ~56 columns and chops anything
+# past it. fit() would truncate mid-word behind an ellipsis, so the applied
+# headline reads as a dangling fragment. condense() instead SHORTENS the whole
+# thought to fit, so the line still reads as a headline.
+SPINNER_MAX = 56
+
+# Trailing source credit after a dash/pipe — drop it, the wire is the wire.
+_SOURCE_TAG = re.compile(
+    r"\s*[—–|]\s*(reuters|bloomberg|cnbc|ap|afp|wsj|ft|financial times|bbc|cnn|"
+    r"the guardian|nyt|new york times|barron'?s|marketwatch|axios|politico)\s*$",
+    re.I,
+)
+_PARENS = re.compile(r"\s*[(\[][^)\]]*[)\]]")        # "(details)" / "[tag]"
+_WS = re.compile(r"\s+")
+_ARTICLES = re.compile(r"\b(?:a|an|the)\s+", re.I)   # headline register omits these
+_CLAUSE = re.compile(r"[—–,:;]")                     # NOT '-' (lives inside words)
+# Stock long word -> standard short form. Word-boundaried so we never eat a
+# substring (e.g. "millionaire").
+_ABBREV = [
+    (re.compile(r"\bpercent\b", re.I), "%"),
+    (re.compile(r"\bversus\b", re.I), "vs"),
+    (re.compile(r"\bUnited States\b"), "US"),
+    (re.compile(r"\bUnited Kingdom\b"), "UK"),
+    (re.compile(r"\bEuropean Union\b"), "EU"),
+    (re.compile(r"\bbillion\b", re.I), "bn"),
+    (re.compile(r"\bmillion\b", re.I), "mn"),
+    (re.compile(r"\btrillion\b", re.I), "tn"),
+    (re.compile(r"\bgovernment\b", re.I), "govt"),
+]
+
+
+def condense(title, limit=SPINNER_MAX):
+    """Shorten a headline to <= limit DISPLAY columns while keeping it readable
+    as a whole thought — the opposite of fit(), which hard-truncates and hides
+    the tail behind an ellipsis. Steps escalate only as far as needed to fit:
+
+      1. tidy whitespace, strip a trailing source tag and any parentheticals
+      2. swap stock long words for standard short forms (percent -> %)
+      3. drop articles (headline register omits them anyway)
+      4. keep the leading clause that still fits (headlines front-load the fact)
+      5. trim whole words off the end; ellipsis only if one word already overflows
+
+    Measured in display columns (disp_width), so CJK/emoji headlines fit honestly.
+    """
+    t = _PARENS.sub("", _SOURCE_TAG.sub("", _WS.sub(" ", str(title)).strip())).strip()
+    if disp_width(t) <= limit:
+        return t
+
+    for pat, rep in _ABBREV:
+        t = pat.sub(rep, t)
+    t = _WS.sub(" ", t).strip()
+    if disp_width(t) <= limit:
+        return t
+
+    stripped = _WS.sub(" ", _ARTICLES.sub("", t)).strip()
+    if stripped and disp_width(stripped) <= limit:
+        return stripped
+    t = stripped or t
+
+    # 4. leading clause: the longest head up to a clause break that still fits.
+    best = ""
+    for m in _CLAUSE.finditer(t):
+        head = t[:m.start()].rstrip(" —–,:;")
+        if disp_width(best) < disp_width(head) <= limit:
+            best = head
+    if best:
+        return best
+
+    # 5. whole-word trim from the end — no mid-word cuts.
+    words = t.split(" ")
+    while words and disp_width(" ".join(words)) > limit:
+        words.pop()
+    if words:
+        return " ".join(words)
+
+    # 6. last resort: a single word longer than the whole line. Hard-cut with an
+    # ellipsis, reserving one column for it.
+    kept, cols = "", 0
+    for ch in t:
+        w = char_width(ch)
+        if cols + w > limit - 1:
+            break
+        kept, cols = kept + ch, cols + w
+    return (kept + "…") if kept else t[:1]
 
 
 def normalize_items(raw):
@@ -321,7 +408,9 @@ def apply_selected(mode, url):
         if not verbs:
             print(f"no feed at {url} — nothing applied.")
             return
-        verbs = [fit(v["title"], 64) for v in verbs]  # titles only, one line each
+        # Condense (not truncate) each title to the spinner's 56-col line so the
+        # whole headline reads instead of dangling behind an ellipsis.
+        verbs = [condense(v["title"], SPINNER_MAX) for v in verbs]
         apply_pack(verbs, "news")
         print(f"✓ live news is now your spinner ({len(verbs)} headlines).")
         print("  The poller keeps it fresh; open a new session to see the latest wire.")
@@ -410,6 +499,18 @@ def demo():
             if out != text:
                 assert out.endswith("…"), (w, repr(text), repr(out))
     assert fit("short", 80) == "short"
+    # condense(): every headline lands within the 56-col spinner line, stays
+    # non-empty, and reads as a whole thought (only the last-resort path ellipsizes).
+    for text in headlines + [
+        "Fed holds rates steady as inflation cools, Powell signals patience — Reuters",
+        "United States and European Union agree billion-dollar trade framework",
+    ]:
+        c = condense(text, SPINNER_MAX)
+        assert 0 < disp_width(c) <= SPINNER_MAX, (repr(text), repr(c), disp_width(c))
+    assert condense("Stocks rise on tech rally — Bloomberg", 56) == "Stocks rise on tech rally"
+    assert condense("Short headline", 56) == "Short headline"  # under limit: untouched
+    assert "reuters" not in condense(
+        "Oil slides as OPEC+ weighs output hike next quarter — Reuters", 56).lower()
     # apply_pack must set spinnerVerbs (mode replace) without clobbering other keys
     import tempfile
     d = tempfile.mkdtemp()
