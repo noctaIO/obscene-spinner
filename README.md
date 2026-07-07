@@ -89,13 +89,16 @@ can drop into Claude Code's `statusLine`.
 }
 ```
 
-The scroll position is derived from wall-clock time (`offset = floor(now/step)`),
-not a saved counter. Claude Code re-invokes the status-line command on its own
-(irregular) schedule and re-spawns it fresh each time — deriving the frame from
-the clock means every invocation independently draws the correct frame for
-"now", so an irregular cadence just lowers the framerate, it never desyncs the
-crawl. The renderer is a pure reader: it never touches the network, so it stays
-well under the status-line timeout.
+By default it runs in **page** mode: one whole headline at a time, trimmed to
+the width on a word boundary with a clean `…`, rotating every few seconds. That
+reads like a native ticker. Claude Code re-invokes the status-line command on an
+irregular, event-driven schedule (often only every few seconds), so a
+character-by-character scroll would land mid-word and look broken — page mode
+always shows a complete, sensible headline whenever it happens to render. The
+slot is chosen by wall-clock time, so any invocation independently draws the
+correct current headline. Prefer the scrolling look? `SPIN_STATUS_MODE=marquee`.
+The renderer is a pure reader: it never touches the network, so it stays well
+under the status-line timeout.
 
 Keep the cache fresh with a scheduler (the renderer never fetches):
 
@@ -107,9 +110,12 @@ spin.py --refresh-cache          # fetch feed -> cache, no settings touched
 ```
 
 Tuning (env vars, read by `newscrawl.js` / the status-line reader):
-`SPIN_STATUS_WIDTH` (visible columns, default 44), `SPIN_STATUS_STEP_MS`
-(ms per column, default 250), `SPIN_STATUS_MAX_AGE_MS` (hide news older than
-this, default 30 min), `SPIN_STATUS_NEWS=0` to disable. Watch it live with
+`SPIN_STATUS_MODE` (`page` default, or `marquee`), `SPIN_STATUS_WIDTH` (visible
+columns, default 56), `SPIN_STATUS_PAGE_MS` (ms per headline in page mode,
+default 7000), `SPIN_STATUS_STEP_MS` (ms per column in marquee mode, default
+250), `SPIN_STATUS_MAX_AGE_MS` (hide news older than this, default 30 min),
+`SPIN_STATUS_ICON` (prefix glyph, off by default — a 📰 shows as a tofu box in
+many fonts), `SPIN_STATUS_NEWS=0` to disable. Watch it live with
 `node newscrawl.js --demo`.
 
 ## The verbs

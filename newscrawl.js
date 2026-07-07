@@ -30,11 +30,24 @@ const path = require('path');
 const CACHE = process.env.SPIN_NEWS_CACHE
   || path.join(os.homedir(), '.claude', 'spinner-news-cache.json');
 
-// Marquee tuning. Width can't come from statusLine (no COLUMNS in its stdin
-// payload), so take it from env or fall back to a conservative default that
-// leaves room for the model/dir/context segments on a normal terminal.
-const WIDTH = parseInt(process.env.SPIN_STATUS_WIDTH || '48', 10);
-const STEP_MS = parseInt(process.env.SPIN_STATUS_STEP_MS || '250', 10); // ms per 1-col shift
+// Display tuning. Width can't come from statusLine (no COLUMNS in its stdin
+// payload), so take it from env or fall back to a default that leaves room for
+// the model/dir/context segments on a normal terminal.
+//
+// Two modes:
+//   page    (default) — show ONE whole headline, word-trimmed with a clean "…",
+//                        rotating every PAGE_MS. Reads like a native ticker.
+//   marquee           — char-by-char horizontal scroll of the whole feed.
+// statusLine re-renders only ~every few seconds (event-driven, not a timer), so
+// a char-marquee lands mid-word and looks broken. Page mode always shows a
+// complete, sensible headline whenever it happens to render — hence the default.
+const MODE = (process.env.SPIN_STATUS_MODE || 'page').toLowerCase();
+const WIDTH = parseInt(process.env.SPIN_STATUS_WIDTH || '56', 10);
+const STEP_MS = parseInt(process.env.SPIN_STATUS_STEP_MS || '250', 10); // marquee: ms per col
+const PAGE_MS = parseInt(process.env.SPIN_STATUS_PAGE_MS || '7000', 10); // page: ms per headline
+// No icon by default — a 📰 emoji renders as a tofu box in many terminal fonts,
+// which looks broken. Opt in with SPIN_STATUS_ICON if your font has the glyph.
+const ICON = process.env.SPIN_STATUS_ICON || '';
 const SEP = '   •   ';
 const DIM = '\x1b[2m', RESET = '\x1b[0m';
 
@@ -98,10 +111,45 @@ function frameAt(items, ms, width = WIDTH, stepMs = STEP_MS) {
   return window(text, width, offset);
 }
 
+// --- page mode (default) ----------------------------------------------------
+
+// Trim a headline to `width` on a WORD boundary, appending "…". Never cuts
+// mid-word (unless a single word is longer than the whole width), so the result
+// always reads as a complete, intentional line rather than a random slice.
+function fitHeadline(s, width) {
+  s = String(s || '').trim();
+  if (s.length <= width) return s;
+  let cut = s.slice(0, width - 1);          // reserve a column for the ellipsis
+  const sp = cut.lastIndexOf(' ');
+  if (sp > width * 0.5) cut = cut.slice(0, sp); // snap back to a word, if not too short
+  return cut.replace(/[\s,.;:—–-]+$/, '') + '…';
+}
+
+// One whole headline per time-slot, rotating through the feed. Wall-clock index
+// so any render (however irregular) shows the correct current headline.
+function pageAt(items, ms, width = WIDTH, pageMs = PAGE_MS) {
+  const list = (items || [])
+    .map(it => {
+      const title = String(it.title || '').trim();
+      const summary = String(it.summary || '').trim();
+      return summary ? `${title} — ${summary}` : title;
+    })
+    .filter(Boolean);
+  if (!list.length) return '';
+  const idx = Math.floor(ms / pageMs) % list.length;
+  return fitHeadline(list[idx], width);
+}
+
+// The single entry point the renderers use — picks mode, returns a ready body.
+function frameFor(items, ms) {
+  return MODE === 'marquee' ? frameAt(items, ms) : pageAt(items, ms);
+}
+
 function render() {
-  const frame = frameAt(readCache(), nowMs());
-  if (!frame) return; // nothing cached -> print nothing, statusLine stays clean
-  process.stdout.write(`${DIM}📰 ${frame}${RESET}`);
+  const body = frameFor(readCache(), nowMs());
+  if (!body) return; // nothing cached -> print nothing, statusLine stays clean
+  const prefix = ICON ? ICON + ' ' : '';
+  process.stdout.write(`${DIM}${prefix}${body}${RESET}`);
 }
 
 // --- refresh (poller side; only place that touches the network) -------------
@@ -174,6 +222,27 @@ function selftest() {
   // Empty cache renders nothing (statusLine stays clean).
   if (frameAt([], 0) !== '') throw new Error('empty cache should render empty');
 
+  // --- page mode ---
+  // Word-boundary trim: never ends mid-word, always ends with the ellipsis.
+  const long = 'Kremlin says Putin held a US-initiated phone call with President Trump';
+  const trimmed = fitHeadline(long, 30);
+  if (trimmed.length > 30) throw new Error(`page headline ${trimmed.length} > 30`);
+  if (!trimmed.endsWith('…')) throw new Error('trimmed headline must end with …');
+  if (/\s\S*$/.test(trimmed.slice(0, -1)) && trimmed.slice(0, -1).endsWith(' '))
+    throw new Error('should not leave a trailing space before …');
+  if (long.slice(0, trimmed.length - 1).indexOf(trimmed.slice(0, 5)) !== 0)
+    throw new Error('trim must be a prefix of the original');
+  // Short headline passes through untouched (no ellipsis).
+  if (fitHeadline('Fed holds rates', 40) !== 'Fed holds rates')
+    throw new Error('short headline should pass through unchanged');
+  // Page rotates by time and wraps over the feed length.
+  const p0 = pageAt(items, 0, 40, 1000);
+  const p1 = pageAt(items, 1000, 40, 1000);          // next slot -> next headline
+  if (p0 === p1) throw new Error('page did not advance to the next headline');
+  if (pageAt(items, 0, 40, 1000) !== pageAt(items, items.length * 1000, 40, 1000))
+    throw new Error('page did not wrap after a full loop');
+  if (pageAt([], 0) !== '') throw new Error('empty cache should page to empty');
+
   console.log('ok');
 }
 
@@ -187,9 +256,11 @@ function demo() {
     { title: 'Heat wave grips the east', summary: 'Grid operators warn of record demand' },
   ];
   const start = nowMs();
+  const prefix = ICON ? ICON + ' ' : '';
   const timer = setInterval(() => {
-    const frame = frameAt(seed, nowMs() - start);
-    process.stdout.write(`\r\x1b[K${DIM}📰 ${frame}${RESET}`);
+    const body = MODE === 'marquee' ? frameAt(seed, nowMs() - start)
+                                    : pageAt(seed, nowMs() - start);
+    process.stdout.write(`\r\x1b[K${DIM}${prefix}${body}${RESET}`);
   }, 80);
   process.on('SIGINT', () => { clearInterval(timer); process.stdout.write('\r\x1b[K\n'); process.exit(0); });
 }
