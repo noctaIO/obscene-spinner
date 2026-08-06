@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: py${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The whole point of the project is that it runs on a bare Python 3 with
+      # nothing installed, so nothing is installed here either.
+      - name: compile
+        run: python -m compileall -q spin.py make_demo.py tools tests
+
+      - name: unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: selftest (the front door users actually run)
+        run: python spin.py --selftest
+
+      - name: the CLI works without a terminal
+        run: |
+          python spin.py --once
+          python spin.py --list
+          python spin.py --list --json | python -c "import json,sys; d=json.load(sys.stdin); assert d['packs'] and d['spinners'] and d['themes']"
+          python spin.py --docs-table > /dev/null
+          python spin.py --export profanity > /dev/null
+
+      - name: piping into head must not traceback
+        run: |
+          python spin.py --verbs 2>err.txt | head -c 200 > /dev/null
+          if [ -s err.txt ]; then echo "stderr was not empty:"; cat err.txt; exit 1; fi
+
+      - name: NO_COLOR emits no escape codes
+        env:
+          NO_COLOR: "1"
+        run: |
+          python spin.py --list | python -c "import sys; t=sys.stdin.read(); assert '\033' not in t, 'escape codes leaked'"
+
+  docs:
+    name: docs match the registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # README tables are generated from PACKS/SPINNERS/THEMES. If someone adds
+      # a pack without regenerating, this fails instead of the docs quietly
+      # going stale.
+      - name: README tables are up to date
+        run: python tools/check_docs.py
+
+      - name: demo art regenerates identically
+        run: |
+          python make_demo.py
+          git diff --exit-code -- demo.svg still.svg gallery.svg
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # ruff is CI-only tooling — it never becomes a dependency of the script.
+      - run: pipx install ruff
+      - run: ruff check --select=E9,F63,F7,F82,F401,F811,F841 .
