@@ -44,6 +44,23 @@ STATE_FILE = os.path.join(CLAUDE_DIR, "spinner-state.json")
 BACKUP_FILE = os.path.join(CLAUDE_DIR, "spinner-backup.json")
 USER_PACK_DIR = os.path.join(CLAUDE_DIR, "spinner-packs")
 
+# Claude Code's spinner COLOUR is reachable: a custom theme file whose `claude`
+# token is documented as "primary brand accent, used for the spinner". The
+# filename is the slug, and Claude Code watches this directory and hot-reloads,
+# so rewriting the file recolours a running session. We keep exactly one file
+# and rewrite it on every apply.
+THEME_DIR = os.path.join(CLAUDE_DIR, "themes")
+THEME_SLUG = "obscene-spinner"
+THEME_FILE = os.path.join(THEME_DIR, THEME_SLUG + ".json")
+THEME_BASES = ("dark", "light", "dark-daltonized", "light-daltonized",
+               "dark-ansi", "light-ansi")
+DEFAULT_THEME_BASE = "dark"
+
+# Claude Code's spinner GLYPH is not reachable — there is no setting for it, so
+# it always draws this. The gallery's "as Claude Code will draw it" pane uses
+# this rather than whichever animation you're previewing, or it would be lying.
+CLAUDE_SPINNER = "braille"
+
 # Neutral feed of live headlines. Override with --news-url or SPIN_NEWS_URL.
 # The endpoint returns {"items": ["headline", ...]} — nothing else is assumed.
 NEWS_URL = os.environ.get(
@@ -410,6 +427,80 @@ def theme_rgb(theme, role, phase=0.0):
         t = phase % 1.0
         return _lerp(th["frame"], th["accent"], t * 2 if t < 0.5 else (1 - t) * 2)
     return th["frame"]
+
+
+def hex_of(rgb):
+    """#rrggbb — the colour format Claude Code's theme files take."""
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(c))) for c in rgb)
+
+
+def luminance(rgb):
+    """Relative luminance, 0.0-1.0. Only used to compare two colours."""
+    r, g, b = (c / 255.0 for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def lighten(rgb, amount=0.4):
+    """Blend toward white."""
+    return tuple(round(c + (255 - c) * amount) for c in rgb)
+
+
+def shimmer_for(theme):
+    """The lighter partner colour for Claude Code's spinner gradient.
+
+    The docs describe claudeShimmer as "the lighter color used in the spinner's
+    animated gradient", so it has to actually BE lighter. Half our gradient
+    themes run bright -> dark (void, blood, deep, matrix), and naively handing
+    over `accent` would give Claude Code a shimmer darker than the base colour
+    and invert the animation. So take whichever of accent and a lightened frame
+    is genuinely brighter.
+    """
+    th = get_theme(theme) if isinstance(theme, str) else theme
+    frame = tuple(th["frame"])
+    candidates = [tuple(th["accent"]), lighten(frame)]
+    best = max(candidates, key=luminance)
+    return best if luminance(best) > luminance(frame) else lighten(frame, 0.55)
+
+
+def claude_theme_payload(theme, base=DEFAULT_THEME_BASE):
+    """The exact JSON to write to ~/.claude/themes/<slug>.json.
+
+    Only `claude` and `claudeShimmer` are set. `overrides` is documented as
+    additive — "tokens not listed here fall through to the base preset" — so
+    every other colour in the user's UI is left exactly as it was.
+    """
+    th = get_theme(theme) if isinstance(theme, str) else theme
+    if base not in THEME_BASES:
+        base = DEFAULT_THEME_BASE
+    return {
+        "name": "obscene-spinner (%s)" % th["name"],
+        "base": base,
+        "overrides": {
+            "claude": hex_of(th["frame"]),
+            "claudeShimmer": hex_of(shimmer_for(th)),
+        },
+    }
+
+
+def write_claude_theme(theme, base=DEFAULT_THEME_BASE, path=THEME_FILE):
+    """Write the theme file. Returns (payload, existed_before).
+
+    Atomic, because Claude Code watches this directory — a half-written file
+    would be read as a broken theme.
+    """
+    existed = os.path.exists(path)
+    payload = claude_theme_payload(theme, base)
+    _atomic_write_json(path, payload)
+    return payload, existed
+
+
+def remove_claude_theme(path=THEME_FILE):
+    """Delete our theme file. Returns True if there was one."""
+    try:
+        os.remove(path)
+        return True
+    except OSError:
+        return False
 
 
 def render_line(frame, text, theme, mode, phase=0.0, suffix="…"):
@@ -1684,7 +1775,7 @@ def draw_detail(scr, at, y0, x0, w, h, st, pack, now):
     # glance which verbs come close to being chopped at SPINNER_MAX columns.
     # Needs the header line, both rules and at least one verb — in a window too
     # short for that, show nothing rather than an empty box.
-    room = min(len(verbs), y0 + h - y - 3)
+    room = min(len(verbs), y0 + h - y - 4)
     if room < 1:
         return
     _put(scr, y, x0, "as Claude Code will draw it", at.DIM)
@@ -1693,18 +1784,26 @@ def draw_detail(scr, at, y0, x0, w, h, st, pack, now):
     rule = "─" * inner
     _put(scr, y, x0, "┌" + rule + "┐", at.DIM)
     y += 1
-    fw = frame_width(sid)
+    # Claude Code draws ITS OWN glyph — there's no setting for it — so this box
+    # shows braille whatever animation you're previewing. The colour, though, is
+    # genuinely what you'll get: that's the `claude` token we write.
+    real = CLAUDE_SPINNER
+    fw = frame_width(real)
     for i in range(room):
         v = verbs[(int(now / VERB_DWELL) + i) % len(verbs)]
-        ph = (now / get_spinner(sid)["interval"] + i * 0.2) % 1.0
+        ph = (now / get_spinner(real)["interval"] + i * 0.2) % 1.0
         _put(scr, y, x0, "│", at.DIM)
-        _put(scr, y, x0 + 1, frame_at(sid, now, i * 0.4),
+        _put(scr, y, x0 + 1, frame_at(real, now, i * 0.4),
              at.color(theme_rgb(tid, "frame", ph), True), maxw=fw)
         _put(scr, y, x0 + 2 + fw, fit(v + "…", inner - fw - 1, prefix=0),
              at.color(theme_rgb(tid, "text")), maxw=inner - fw - 2)
         _put(scr, y, x0 + inner + 1, "│", at.DIM)
         y += 1
     _put(scr, y, x0, "└" + rule + "┘", at.DIM)
+    y += 1
+    # Say plainly which half of the selection actually leaves this program.
+    _put(scr, y, x0, "real: verbs + colour · local: %s animation"
+         % get_spinner(sid)["name"].lower(), at.DIM)
 
 
 def draw_wall(scr, at, st, now, h, w):
@@ -1950,30 +2049,40 @@ def _load_json(path, default=None):
         return default
 
 
-def backup_once(settings_path=SETTINGS, backup_path=BACKUP_FILE):
-    """Stash whatever spinnerVerbs the user had BEFORE we ever touched it.
+def backup_once(settings_path=SETTINGS, backup_path=BACKUP_FILE,
+                theme_path=THEME_FILE):
+    """Stash whatever we're about to overwrite, BEFORE we ever touch it.
 
     Written exactly once: the second apply must not overwrite the backup with
     our own pack, or --restore would hand back a pack we installed instead of
-    the thing they started with. Records an explicit sentinel when there was no
-    spinnerVerbs at all, so restore knows to delete the key rather than guess.
+    the thing they started with. Records explicit sentinels where there was
+    nothing at all, so restore knows to delete rather than guess.
+
+    Covers two things: the user's spinnerVerbs, and any theme file already
+    sitting at our slug (someone may have hand-written one before installing).
     """
     if os.path.exists(backup_path):
         return False
     data = _load_json(settings_path, {}) or {}
     prior = data.get("spinnerVerbs")
-    _atomic_write_json(backup_path, {"absent": prior is None,
-                                     "spinnerVerbs": prior})
+    prior_theme = _load_json(theme_path)
+    _atomic_write_json(backup_path, {
+        "absent": prior is None,
+        "spinnerVerbs": prior,
+        "claudeThemeAbsent": prior_theme is None,
+        "claudeTheme": prior_theme,
+    })
     return True
 
 
 def apply_pack(verbs, mode, settings_path=SETTINGS, mode_path=MODE_FILE,
-               backup_path=BACKUP_FILE, state=None, state_path=STATE_FILE):
+               backup_path=BACKUP_FILE, state=None, state_path=STATE_FILE,
+               theme_path=THEME_FILE):
     """Write the pack into Claude Code's spinnerVerbs (mode 'replace'), atomically,
     preserving every other setting. Records the mode so the poller knows whether
     to keep refreshing headlines, and backs up the previous value once so
     --restore can put it back."""
-    backup_once(settings_path, backup_path)
+    backup_once(settings_path, backup_path, theme_path)
     data = _load_json(settings_path, {})
     if not isinstance(data, dict):
         data = {}
@@ -1994,9 +2103,10 @@ def apply_pack(verbs, mode, settings_path=SETTINGS, mode_path=MODE_FILE,
 
 
 def restore_pack(settings_path=SETTINGS, backup_path=BACKUP_FILE,
-                 mode_path=MODE_FILE, state_path=STATE_FILE):
-    """Put back the spinnerVerbs the user had before the first apply.
-    Returns a human-readable outcome string."""
+                 mode_path=MODE_FILE, state_path=STATE_FILE,
+                 theme_path=THEME_FILE):
+    """Put back everything the user had before the first apply — spinnerVerbs
+    and the theme file. Returns a human-readable outcome string."""
     backup = _load_json(backup_path)
     if backup is None:
         return "nothing to restore — no backup was taken."
@@ -2005,21 +2115,32 @@ def restore_pack(settings_path=SETTINGS, backup_path=BACKUP_FILE,
         data = {}
     if backup.get("absent"):
         data.pop("spinnerVerbs", None)
-        what = "Claude Code's own verbs"
+        what = ["Claude Code's own verbs"]
     else:
         data["spinnerVerbs"] = backup.get("spinnerVerbs")
-        what = "your previous spinnerVerbs"
+        what = ["your previous spinnerVerbs"]
     _atomic_write_json(settings_path, data)
-    for path in (backup_path, state_path):
+
+    # The colour half: either hand back the theme file that was there before us,
+    # or take ours away entirely.
+    had_theme = os.path.exists(theme_path)
+    if backup.get("claudeThemeAbsent", True):
+        if remove_claude_theme(theme_path):
+            what.append("removed the spinner colour")
+    else:
+        _atomic_write_json(theme_path, backup.get("claudeTheme"))
+        what.append("your previous %s.json" % THEME_SLUG)
+
+    for path in (backup_path, state_path, mode_path):
         try:
             os.remove(path)
         except OSError:
             pass
-    try:
-        os.remove(mode_path)
-    except OSError:
-        pass
-    return "✓ restored %s." % what
+    msg = "✓ restored %s." % " and ".join(what)
+    if had_theme:
+        msg += ("\n  If you picked \"%s\" in /theme, switch back to your own theme "
+                "there too." % THEME_SLUG)
+    return msg
 
 
 def read_state(state_path=STATE_FILE, mode_path=MODE_FILE):
@@ -2051,7 +2172,32 @@ def current_mode():
 LEGACY_ALIASES = {"verbs": "profanity", "profanity": "profanity", "news": "news"}
 
 
-def apply_selected(mode, url=None, spinner=None, theme=None, quiet=False):
+def _theme_notes(tid, base, existed, payload):
+    """What to tell the user after writing the theme file.
+
+    First time round they have to select it in /theme once — nothing in the
+    documented settings surface lets a tool change the theme preference, and
+    guessing at an undocumented one would be worse than asking. After that the
+    same file is rewritten on every apply and Claude Code hot-reloads it, so
+    the colour just follows the pack.
+    """
+    out = []
+    swatch = payload["overrides"]["claude"]
+    if existed:
+        out.append("  Spinner colour → %s (%s). Applies live." % (swatch, tid))
+    else:
+        out.append("  Spinner colour → %s (%s), written to ~/.claude/themes/%s.json."
+                   % (swatch, tid, THEME_SLUG))
+        out.append("  One-off: run /theme in Claude Code and pick \"%s\" to turn it on."
+                   % THEME_SLUG)
+        out.append("  (If ~/.claude/themes/ didn't exist yet, restart Claude Code once.)")
+        out.append("  It starts from the \"%s\" preset — that sets the rest of the UI "
+                   "too; --theme-base changes it." % base)
+    return out
+
+
+def apply_selected(mode, url=None, spinner=None, theme=None, quiet=False,
+                   theme_base=DEFAULT_THEME_BASE, write_theme=True):
     """Apply a pack by id (or a legacy mode word). Returns True on success."""
     pid = LEGACY_ALIASES.get(mode, mode)
     if pid == "toggle":
@@ -2077,6 +2223,10 @@ def apply_selected(mode, url=None, spinner=None, theme=None, quiet=False):
     legacy = "news" if pack.get("kind") == "live" else "verbs"
     apply_pack(verbs, legacy, state={"pack": pack["id"], "spinner": sid,
                                      "theme": tid})
+    notes = []
+    if write_theme:
+        payload, existed = write_claude_theme(tid, theme_base)
+        notes = _theme_notes(tid, theme_base, existed, payload)
     if not quiet:
         print("✓ %s is now your spinner (%s)." % (pack["name"], plural(len(verbs), "verb")))
         if over:
@@ -2087,12 +2237,15 @@ def apply_selected(mode, url=None, spinner=None, theme=None, quiet=False):
                   "latest wire.")
         else:
             print("  Shows next time Claude Code spins one up.")
+        for line in notes:
+            print(line)
         print("  `%s --restore` puts your old spinner back."
               % os.path.basename(sys.argv[0] or "spin.py"))
     return True
 
 
-def apply_mix(pack_ids, url=None, spinner=None, theme=None):
+def apply_mix(pack_ids, url=None, spinner=None, theme=None,
+              theme_base=DEFAULT_THEME_BASE, write_theme=True):
     """Apply several packs blended into one spinner list."""
     packs = []
     for pid in pack_ids:
@@ -2118,6 +2271,10 @@ def apply_mix(pack_ids, url=None, spinner=None, theme=None):
                                       "spinner": sid, "theme": tid})
     print("✓ mixed %s — %s."
           % (", ".join(p["name"] for p in packs), plural(len(verbs), "verb")))
+    if write_theme:
+        payload, existed = write_claude_theme(tid, theme_base)
+        for line in _theme_notes(tid, theme_base, existed, payload):
+            print(line)
     return True
 
 
@@ -2276,14 +2433,18 @@ def docs_tables():
         while len(cells) < 4:
             cells.append("")
         out.append("| " + " | ".join(cells) + " |")
-    out += ["", "| theme | style | theme | style |", "| --- | --- | --- | --- |"]
+    # The `claude` column is the colour Claude Code's own spinner actually
+    # becomes, so the table doubles as the reference for what you're picking.
+    out += ["", "| theme | style | spinner colour | theme | style | spinner colour |",
+            "| --- | --- | --- | --- | --- | --- |"]
     tids = list(THEMES)
     for i in range(0, len(tids), 2):
         cells = []
         for tid in tids[i:i + 2]:
             cells.append("`%s`" % tid)
             cells.append(THEMES[tid].get("style", "solid"))
-        while len(cells) < 4:
+            cells.append("`%s`" % hex_of(THEMES[tid]["frame"]))
+        while len(cells) < 6:
             cells.append("")
         out.append("| " + " | ".join(cells) + " |")
     return "\n".join(out)
@@ -2370,8 +2531,17 @@ def build_parser():
                         "(also accepts verbs|news|toggle)")
     p.add_argument("--mix", nargs="+", metavar="ID",
                    help="apply several packs blended together")
+    p.add_argument("--theme-base", choices=THEME_BASES,
+                   default=DEFAULT_THEME_BASE,
+                   help="preset the written Claude Code theme starts from "
+                        "(default %s; it sets the rest of the UI too)"
+                        % DEFAULT_THEME_BASE)
+    p.add_argument("--no-theme", action="store_true",
+                   help="apply verbs only — don't recolour Claude Code's spinner")
+    p.add_argument("--print-theme", metavar="ID", nargs="?", const="",
+                   help="print the Claude Code theme JSON for a theme and exit")
     p.add_argument("--restore", action="store_true",
-                   help="put back the spinnerVerbs you had before")
+                   help="put back the spinnerVerbs and colour you had before")
     p.add_argument("--status", action="store_true",
                    help="print the current spinner selection and exit")
     p.add_argument("--export", metavar="ID", help="print a pack as JSON")
@@ -2426,6 +2596,13 @@ def main(argv=None):
     if a.restore:
         print(restore_pack())
         return
+    if a.print_theme is not None:
+        tid = a.print_theme or a.theme or DEFAULT_THEME
+        if tid not in THEMES:
+            print("no theme %r — try --list." % tid)
+            raise SystemExit(1)
+        print(json.dumps(claude_theme_payload(tid, a.theme_base), indent=2))
+        return
     if a.status:
         st = read_state()
         if not st:
@@ -2434,12 +2611,25 @@ def main(argv=None):
             print("spinner: %s · animation %s · theme %s"
                   % (st.get("pack"), st.get("spinner", DEFAULT_SPINNER),
                      st.get("theme", DEFAULT_THEME)))
+        # Always report the colour: the theme file is independent of the pack,
+        # so --no-theme or a leftover file both need to be visible here.
+        live = _load_json(THEME_FILE)
+        if live:
+            print("colour:  %s from ~/.claude/themes/%s.json (base %s)"
+                  % (live.get("overrides", {}).get("claude", "?"),
+                     THEME_SLUG, live.get("base", "?")))
+            print("         active only if /theme has \"%s\" selected."
+                  % THEME_SLUG)
+        else:
+            print("colour:  not set — Claude Code's own spinner colour")
         return
     if a.mix:
-        raise SystemExit(0 if apply_mix(a.mix, a.news_url, a.spinner, a.theme) else 1)
+        raise SystemExit(0 if apply_mix(a.mix, a.news_url, a.spinner, a.theme,
+                                        a.theme_base, not a.no_theme) else 1)
     if a.set:
         raise SystemExit(0 if apply_selected(a.set, a.news_url, a.spinner,
-                                             a.theme) else 1)
+                                             a.theme, theme_base=a.theme_base,
+                                             write_theme=not a.no_theme) else 1)
 
     for e in user_pack_errors():
         print("! custom pack: " + e, file=sys.stderr)
@@ -2488,7 +2678,8 @@ def main(argv=None):
             print(restore_pack())
         elif choice:
             apply_selected(choice["pack"], a.news_url, choice["spinner"],
-                           choice["theme"])
+                           choice["theme"], theme_base=a.theme_base,
+                           write_theme=not a.no_theme)
     else:
         spin(a.interval if a.interval is not None else 0.6,
              get_pack("profanity"), spinner, theme, mode)  # piped: preview

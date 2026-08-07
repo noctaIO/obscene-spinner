@@ -11,6 +11,7 @@ runs in a tempdir, and the one live pack is stubbed.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -261,6 +262,77 @@ class TestThemes(unittest.TestCase):
 
     def test_unknown_theme_falls_back(self):
         self.assertEqual(spin.get_theme("nope"), spin.THEMES[spin.DEFAULT_THEME])
+
+
+class TestClaudeTheme(unittest.TestCase):
+    """The one part of the colour system Claude Code actually reads."""
+
+    HEX = re.compile(r"^#[0-9a-f]{6}$")
+
+    def test_payload_schema_for_every_theme(self):
+        for tid in spin.THEMES:
+            p = spin.claude_theme_payload(tid)
+            self.assertEqual(set(p), {"name", "base", "overrides"}, tid)
+            self.assertIn(p["base"], spin.THEME_BASES, tid)
+            self.assertTrue(p["name"].strip(), tid)
+            # Exactly the two spinner tokens — overrides is additive, so
+            # anything else here would quietly restyle unrelated UI.
+            self.assertEqual(set(p["overrides"]), {"claude", "claudeShimmer"}, tid)
+            for k, v in p["overrides"].items():
+                self.assertRegex(v, self.HEX, (tid, k, v))
+
+    def test_shimmer_is_always_lighter_than_the_base_colour(self):
+        # The docs define claudeShimmer as "the lighter color used in the
+        # spinner's animated gradient". Half our gradients run bright -> dark,
+        # so handing over `accent` unexamined would invert the animation.
+        for tid, th in spin.THEMES.items():
+            base = spin.luminance(th["frame"])
+            shim = spin.luminance(spin.shimmer_for(tid))
+            self.assertGreater(shim, base, "%s shimmer is not lighter" % tid)
+
+    def test_claude_token_is_the_theme_frame_colour(self):
+        for tid, th in spin.THEMES.items():
+            self.assertEqual(spin.claude_theme_payload(tid)["overrides"]["claude"],
+                             spin.hex_of(th["frame"]), tid)
+
+    def test_base_is_honoured_and_a_bad_one_falls_back(self):
+        for base in spin.THEME_BASES:
+            self.assertEqual(spin.claude_theme_payload("acid", base)["base"], base)
+        self.assertEqual(spin.claude_theme_payload("acid", "nonsense")["base"],
+                         spin.DEFAULT_THEME_BASE)
+
+    def test_unknown_theme_falls_back_rather_than_raising(self):
+        p = spin.claude_theme_payload("no-such-theme")
+        self.assertRegex(p["overrides"]["claude"], self.HEX)
+
+    def test_hex_of_clamps_and_formats(self):
+        self.assertEqual(spin.hex_of((0, 0, 0)), "#000000")
+        self.assertEqual(spin.hex_of((255, 255, 255)), "#ffffff")
+        self.assertEqual(spin.hex_of((-5, 300, 128)), "#00ff80")
+
+    def test_lighten_moves_toward_white_without_overflowing(self):
+        self.assertEqual(spin.lighten((0, 0, 0), 1.0), (255, 255, 255))
+        self.assertEqual(spin.lighten((255, 255, 255), 0.5), (255, 255, 255))
+        self.assertGreater(spin.luminance(spin.lighten((10, 20, 30))),
+                           spin.luminance((10, 20, 30)))
+
+    def test_write_and_remove_round_trip(self):
+        d = tempfile.mkdtemp(prefix="spin-theme-")
+        path = os.path.join(d, "themes", "obscene-spinner.json")
+        payload, existed = spin.write_claude_theme("void", "dark", path)
+        self.assertFalse(existed)
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), payload)
+        # atomic: the watcher must never see a partial file
+        self.assertFalse(os.path.exists(path + ".tmp"))
+        _, existed = spin.write_claude_theme("acid", "dark", path)
+        self.assertTrue(existed)
+        self.assertTrue(spin.remove_claude_theme(path))
+        self.assertFalse(spin.remove_claude_theme(path))
+
+    def test_print_theme_output_is_valid_json(self):
+        for tid in spin.THEMES:
+            json.dumps(spin.claude_theme_payload(tid))
 
 
 class TestPackRegistry(unittest.TestCase):
@@ -520,6 +592,7 @@ class TestApplyAndRestore(unittest.TestCase):
         self.mode = os.path.join(self.dir, "spinner-mode")
         self.backup = os.path.join(self.dir, "spinner-backup.json")
         self.state = os.path.join(self.dir, "spinner-state.json")
+        self.theme = os.path.join(self.dir, "themes", "obscene-spinner.json")
 
     def write_settings(self, obj):
         with open(self.settings, "w", encoding="utf-8") as f:
@@ -531,7 +604,11 @@ class TestApplyAndRestore(unittest.TestCase):
 
     def apply(self, verbs, mode="verbs", state=None):
         spin.apply_pack(verbs, mode, self.settings, self.mode, self.backup,
-                        state, self.state)
+                        state, self.state, self.theme)
+
+    def restore(self):
+        return spin.restore_pack(self.settings, self.backup, self.mode,
+                                 self.state, self.theme)
 
     def test_writes_spinner_verbs_without_touching_anything_else(self):
         self.write_settings({"theme": "dark", "nested": {"deep": True}})
@@ -562,34 +639,31 @@ class TestApplyAndRestore(unittest.TestCase):
         self.apply(["a"])
         self.apply(["b"])          # a second apply must not move the backup
         self.apply(["c"])
-        msg = spin.restore_pack(self.settings, self.backup, self.mode,
-                                self.state)
+        msg = self.restore()
         self.assertIn("restored", msg)
         self.assertEqual(self.read_settings(), original)
 
     def test_restore_removes_the_key_when_there_was_none(self):
         self.write_settings({"theme": "dark"})
         self.apply(["a"])
-        spin.restore_pack(self.settings, self.backup, self.mode, self.state)
+        self.restore()
         self.assertEqual(self.read_settings(), {"theme": "dark"})
         self.assertNotIn("spinnerVerbs", self.read_settings())
 
     def test_restore_clears_its_own_bookkeeping(self):
         self.apply(["a"], state={"pack": "zen"})
-        spin.restore_pack(self.settings, self.backup, self.mode, self.state)
+        self.restore()
         for path in (self.backup, self.state, self.mode):
             self.assertFalse(os.path.exists(path), path)
 
     def test_restore_with_no_backup_says_so(self):
-        msg = spin.restore_pack(self.settings, self.backup, self.mode,
-                                self.state)
-        self.assertIn("nothing to restore", msg)
+        self.assertIn("nothing to restore", self.restore())
 
     def test_backup_once_is_idempotent(self):
         self.write_settings({"spinnerVerbs": {"verbs": ["first"]}})
-        self.assertTrue(spin.backup_once(self.settings, self.backup))
+        self.assertTrue(spin.backup_once(self.settings, self.backup, self.theme))
         self.write_settings({"spinnerVerbs": {"verbs": ["second"]}})
-        self.assertFalse(spin.backup_once(self.settings, self.backup))
+        self.assertFalse(spin.backup_once(self.settings, self.backup, self.theme))
         with open(self.backup, encoding="utf-8") as f:
             self.assertEqual(json.load(f)["spinnerVerbs"]["verbs"], ["first"])
 
@@ -607,6 +681,37 @@ class TestApplyAndRestore(unittest.TestCase):
     def test_the_write_is_atomic_and_leaves_no_temp_file(self):
         self.apply(["a"])
         self.assertFalse(os.path.exists(self.settings + ".tmp"))
+
+    def test_a_pre_existing_theme_at_our_slug_is_backed_up_and_returned(self):
+        # Someone may have hand-written a theme at our filename before
+        # installing. Applying must not silently eat it.
+        theirs = {"name": "Mine", "base": "light",
+                  "overrides": {"claude": "#123456", "error": "#ff0000"}}
+        spin._atomic_write_json(self.theme, theirs)
+        self.apply(["a"])
+        spin.write_claude_theme("void", "dark", self.theme)
+        with open(self.theme, encoding="utf-8") as f:
+            self.assertNotEqual(json.load(f), theirs)
+        self.restore()
+        with open(self.theme, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), theirs)
+
+    def test_restore_removes_a_theme_we_created(self):
+        self.apply(["a"])
+        spin.write_claude_theme("acid", "dark", self.theme)
+        self.assertTrue(os.path.exists(self.theme))
+        msg = self.restore()
+        self.assertFalse(os.path.exists(self.theme))
+        self.assertIn("colour", msg)
+
+    def test_backup_does_not_capture_the_theme_we_just_wrote(self):
+        # backup_once runs inside apply_pack, before write_claude_theme — so a
+        # second apply must still see claudeThemeAbsent from the first.
+        self.apply(["a"])
+        spin.write_claude_theme("void", "dark", self.theme)
+        self.apply(["b"])
+        with open(self.backup, encoding="utf-8") as f:
+            self.assertTrue(json.load(f)["claudeThemeAbsent"])
 
     def test_legacy_aliases_still_map_to_packs(self):
         self.assertEqual(spin.LEGACY_ALIASES["verbs"], "profanity")
@@ -830,6 +935,48 @@ class TestGalleryRendering(unittest.TestCase):
         self.assertEqual(len(rules), 2)
         self.assertGreater(rules[1] - rules[0], 1)
 
+    def test_the_preview_box_uses_claude_codes_own_glyph_not_the_selection(self):
+        # Claude Code draws braille and offers no setting to change it, so a box
+        # labelled "as Claude Code will draw it" must show braille whatever
+        # animation is selected — otherwise it is simply wrong.
+        braille = set(spin.SPINNERS[spin.CLAUDE_SPINNER]["frames"])
+        for sid in ("moon", "bar", "binary", "hearts", "line", "static"):
+            scr = spin.TextScreen(30, 100)
+            st = spin.GalleryState(packs=spin.all_packs(), spinner=sid)
+            spin.draw_gallery(scr, spin.Attrs(), st, 2.0)
+            rows = [self._cells(r) for r in scr.grid]
+            # Locate the box by its top rule; the pane divider is also a "│",
+            # so the glyph column has to come from the box's own left edge.
+            tops = [i for i, r in enumerate(rows) if "┌" in r]
+            bottoms = [i for i, r in enumerate(rows) if "└" in r]
+            self.assertTrue(tops and bottoms, "no preview box for %s" % sid)
+            col = rows[tops[0]].index("┌")
+            body = rows[tops[0] + 1:bottoms[0]]
+            self.assertTrue(body, "empty preview box for %s" % sid)
+            for row in body:
+                self.assertEqual(row[col], "│", (sid, repr(row)))
+                glyph = row[col + 1]
+                self.assertIn(glyph, braille,
+                              "preview showed %r with --spinner %s" % (glyph, sid))
+
+    def test_the_pane_says_which_half_is_real(self):
+        text = spin.render_gallery_text(width=100, height=30, spinner="moon")
+        self.assertIn("real: verbs + colour", text)
+        self.assertIn("local: moon animation", text)
+
+    def test_the_list_rows_still_show_the_selected_animation(self):
+        # The honesty fix must not flatten the gallery itself.
+        scr = spin.TextScreen(30, 100)
+        st = spin.GalleryState(packs=spin.all_packs(), spinner="moon")
+        spin.draw_gallery(scr, spin.Attrs(), st, 1.0)
+        moon = set(spin.SPINNERS["moon"]["frames"])
+        seen = set()
+        for row in scr.grid[3:]:
+            for cell in row[:8]:
+                if cell in moon:
+                    seen.add(cell)
+        self.assertTrue(seen, "no moon glyphs in the list rows")
+
     def test_the_preview_box_never_exceeds_the_real_spinner_width(self):
         for w in (62, 80, 100, 140, 200):
             text = spin.render_gallery_text(width=w, height=30)
@@ -971,6 +1118,65 @@ class TestCLI(unittest.TestCase):
         self.assertIn("restored", self.run_spin("--restore").stdout)
         with open(settings, encoding="utf-8") as f:
             self.assertEqual(json.load(f), original)
+
+    def theme_path(self):
+        return os.path.join(self.home, ".claude", "themes", "obscene-spinner.json")
+
+    def test_set_writes_a_claude_theme_and_restore_removes_it(self):
+        r = self.run_spin("--set", "pirate", "--theme", "void")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("/theme", r.stdout)          # the one-time instruction
+        with open(self.theme_path(), encoding="utf-8") as f:
+            payload = json.load(f)
+        self.assertEqual(payload["overrides"]["claude"],
+                         spin.hex_of(spin.THEMES["void"]["frame"]))
+        self.assertEqual(payload["base"], "dark")
+        self.run_spin("--restore")
+        self.assertFalse(os.path.exists(self.theme_path()))
+
+    def test_theme_base_is_honoured(self):
+        self.run_spin("--set", "zen", "--theme", "ice", "--theme-base", "light")
+        with open(self.theme_path(), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["base"], "light")
+
+    def test_no_theme_writes_nothing(self):
+        r = self.run_spin("--set", "zen", "--no-theme")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(os.path.exists(self.theme_path()))
+        self.assertNotIn("/theme", r.stdout)
+
+    def test_print_theme_writes_nothing(self):
+        r = self.run_spin("--print-theme", "ember", "--theme-base", "light-ansi")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        payload = json.loads(r.stdout)
+        self.assertEqual(payload["base"], "light-ansi")
+        self.assertEqual(set(payload["overrides"]), {"claude", "claudeShimmer"})
+        self.assertFalse(os.path.exists(self.theme_path()))
+
+    def test_print_theme_rejects_an_unknown_theme(self):
+        self.assertEqual(self.run_spin("--print-theme", "nope").returncode, 1)
+
+    def test_applying_leaves_every_other_setting_alone(self):
+        settings = os.path.join(self.home, ".claude", "settings.json")
+        os.makedirs(os.path.dirname(settings))
+        original = {"theme": "dark", "nested": {"deep": True}, "n": 1}
+        with open(settings, "w", encoding="utf-8") as f:
+            json.dump(original, f)
+        self.run_spin("--set", "chef")
+        with open(settings, encoding="utf-8") as f:
+            after = json.load(f)
+        self.assertEqual([k for k in set(original) | set(after)
+                          if original.get(k) != after.get(k)], ["spinnerVerbs"])
+
+    def test_status_reports_the_colour(self):
+        self.run_spin("--set", "wizard", "--theme", "vapor")
+        out = self.run_spin("--status").stdout
+        self.assertIn("vapor", out)
+        self.assertIn(spin.hex_of(spin.THEMES["vapor"]["frame"]), out)
+        self.run_spin("--restore")
+        after = self.run_spin("--status").stdout
+        self.assertIn("colour:  not set", after)
+        self.assertNotIn("themes/", after)
 
     def test_legacy_flags_still_work(self):
         self.assertEqual(self.run_spin("--set", "verbs").returncode, 0)

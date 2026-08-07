@@ -24,7 +24,7 @@ Run it bare and you get **the gallery**: every pack on the left, each one animat
 
 Claude Code lets you swap out the verbs it shows while it's working on your prompt. The stock set is whimsical: "Noodling", "Lollygagging", "Shenaniganing". Pleasant. A little pleased with itself.
 
-This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Then twenty more packs besides — pirate, eldritch, corporate, Shakespearean, zen — plus thirty-six animations and a dozen colour themes you can mix into any of them.
+This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Then twenty more packs besides — pirate, eldritch, corporate, Shakespearean, zen — and a dozen colour themes that recolour Claude Code's real spinner, plus thirty-six animations for the previews here. ([Which is which.](#what-actually-reaches-claude-code))
 
 ![the spinner cycling through the pack](demo.svg)
 
@@ -43,9 +43,14 @@ spin --random                 # surprise me
 spin --wall                   # every animation running at once
 
 spin --set british            # apply a pack, no menu
+spin --set zen --theme ice    # …and recolour Claude Code's real spinner
 spin --mix pirate wizard zen  # blend several packs into one spinner
 spin --status                 # what's active right now
-spin --restore                # put back the spinner you had before
+spin --restore                # put back the spinner and colour you had before
+
+spin --no-theme               # apply verbs only, leave the colour alone
+spin --theme-base light       # the preset the written theme starts from
+spin --print-theme void       # the theme JSON, without installing it
 
 spin --sfw                    # hide the rude packs (gallery, --list, --random)
 spin --search dns             # filter packs by name, description or verb
@@ -67,11 +72,11 @@ spin --once                   # one verb and quit, handy for status lines
 | `t` / `T` | cycle the colour theme forwards / back |
 | `w` | wall mode — every animation at once |
 | `r` | randomise pack, animation and theme |
-| `u` | restore the spinner you had before |
+| `u` | restore the spinner and colour you had before |
 | `?` | key help |
 | `q` | quit, changing nothing |
 
-The right-hand pane draws a box exactly **56 columns** wide — the width Claude Code chops the verb line at — so you can see at a glance which verbs are living dangerously.
+The right-hand pane draws a box exactly **56 columns** wide — the width Claude Code chops the verb line at — so you can see at a glance which verbs are living dangerously. It draws them in braille and in the pack's real colour, because that's what Claude Code will actually render; the animation you pick with `f` drives the list rows and the standalone previews.
 
 ## What ships
 
@@ -124,20 +129,32 @@ The right-hand pane draws a box exactly **56 columns** wide — the width Claude
 | `earth` | `🌍🌎🌏` | `clock` | `🕐🕑🕒🕓🕔🕕🕖🕗` |
 | `hearts` | `💛💙💜💚🧡` | `static` | `●` |
 
-| theme | style | theme | style |
-| --- | --- | --- | --- |
-| `acid` | solid | `ember` | gradient |
-| `void` | gradient | `ice` | gradient |
-| `matrix` | gradient | `blood` | gradient |
-| `gold` | gradient | `vapor` | gradient |
-| `deep` | gradient | `bone` | solid |
-| `mono` | solid | `rainbow` | rainbow |
+| theme | style | spinner colour | theme | style | spinner colour |
+| --- | --- | --- | --- | --- | --- |
+| `acid` | solid | `#b5ff00` | `ember` | gradient | `#ff6b1a` |
+| `void` | gradient | `#9d4edd` | `ice` | gradient | `#5bc0eb` |
+| `matrix` | gradient | `#00ff41` | `blood` | gradient | `#c4141c` |
+| `gold` | gradient | `#ffc107` | `vapor` | gradient | `#ff71ce` |
+| `deep` | gradient | `#0091ad` | `bone` | solid | `#d8d2c4` |
+| `mono` | solid | `#e6edf3` | `rainbow` | rainbow | `#ff0000` |
 
 <!-- END GENERATED TABLES -->
 
 Ratings: `sfw` is safe to have on screen in an open-plan office, `mild` is cheerfully crude, `nsfw` is the reason the project is called this. `spin --sfw` filters to the first group, and so does `s` in the gallery.
 
 Two packs are **live** rather than fixed: `news` pulls real headlines from a JSON feed, and `chaos` deals a shuffled hand from every other pack each time you apply it.
+
+## What actually reaches Claude Code
+
+Worth being precise, because a pack has three parts and only two of them leave this program:
+
+| | reaches Claude Code | how |
+| --- | --- | --- |
+| **verbs** | yes | `spinnerVerbs` in `~/.claude/settings.json` |
+| **colour** | yes | a custom theme in `~/.claude/themes/obscene-spinner.json` |
+| **animation** | **no** | Claude Code draws its own glyph; there's no setting for it |
+
+So `--spinner moon` gives you moon phases in the gallery, in `--pack` previews and in `--wall` — but Claude Code's own spinner stays braille. The gallery's preview box shows braille for exactly that reason: it's a preview, so it has to tell the truth. The colour beside it, though, is genuinely what you'll get.
 
 ## Applying and undoing
 
@@ -157,6 +174,38 @@ spin --restore         # ✓ restored your previous spinnerVerbs.
 ```
 
 Fair warning either way: this is not the version you want on screen during a demo.
+
+## Colouring the real spinner
+
+Claude Code's spinner colour comes from the `claude` theme token, so picking a pack also writes a small theme file:
+
+```json ~/.claude/themes/obscene-spinner.json
+{
+  "name": "obscene-spinner (Void)",
+  "base": "dark",
+  "overrides": {
+    "claude": "#9d4edd",
+    "claudeShimmer": "#c495eb"
+  }
+}
+```
+
+Only those two tokens are ever written. `overrides` is additive — anything not listed falls through to the base preset — so the rest of your interface is untouched. (`claudeShimmer` is the lighter half of the spinner's gradient; each theme's is derived so it's always genuinely lighter than `claude`, including the themes that shade bright→dark.)
+
+**Turn it on once:** run `/theme` in Claude Code and pick **obscene-spinner**. After that you never touch it again — every `spin --set` rewrites the same file, and Claude Code watches that directory, so the colour changes live in a running session.
+
+```bash
+spin --set eldritch --theme void   # writes the file, tells you to run /theme
+spin --set zen --theme matrix      # colour changes immediately, no /theme needed
+spin --status                      # shows the active colour and where it came from
+```
+
+Two caveats worth knowing:
+
+- **`base` sets your whole UI, not just the spinner.** It defaults to `dark`; pass `--theme-base light` (or `dark-daltonized`, `light-ansi`, …) if that's wrong for you. `spin` prints which base it wrote.
+- **If `~/.claude/themes/` didn't exist when Claude Code started**, restart it once after the first apply. After that, changes apply without a restart.
+
+Don't want it? `--no-theme` applies the verbs alone. Want the JSON without installing anything? `--print-theme void`. And `--restore` removes the file — or hands back a theme you'd hand-written at that filename, byte for byte.
 
 ## Your own packs
 
@@ -221,7 +270,7 @@ It degrades rather than breaks. `NO_COLOR`, `TERM=dumb`, a pipe, or `--no-color`
 ## Hacking on it
 
 ```bash
-python3 -m unittest discover -s tests -v   # 118 tests, stdlib only
+python3 -m unittest discover -s tests -v   # 140 tests, stdlib only
 ./spin.py --selftest                       # the same suite, front door
 python3 make_demo.py                       # regenerate the SVGs
 python3 tools/check_docs.py --write        # regenerate the tables above
