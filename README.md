@@ -8,7 +8,7 @@ spin
 
 That puts `spin` (and `obscene-spinner`) on your PATH. Newer Homebrew gates third-party taps, so if it asks, run `brew trust noctaio/tap` first.
 
-Or skip Homebrew — it's one Python 3 file, no pip, no build, no config:
+Or skip Homebrew — it's still one Python 3 file, no pip, no build, no config:
 
 ```bash
 git clone https://github.com/noctaIO/obscene-spinner
@@ -16,35 +16,149 @@ cd obscene-spinner
 ./spin.py
 ```
 
-Ctrl-C to stop.
+Run it bare and you get **the gallery**: every pack on the left, each one animating live in its own glyphs and its own colour, a detail pane on the right showing exactly what Claude Code will draw. Arrow keys to browse, `/` to search, Enter to make it your real spinner. `q` to leave without touching anything.
 
-The point isn't to watch it spin in a window — it's to drive the spinner Claude Code shows **while it's working on your prompt**. So run it bare and you get an arrow-key menu that **sets your real spinner** to whichever pack you pick: profanity or live news (still one file, still no dependencies — that's stdlib `curses`).
+![the gallery — ten packs animating at once](gallery.svg)
 
-```bash
-./spin.py                 # picker → applies your choice to ~/.claude/settings.json
-./spin.py --verbs         # just watch the verb animation, ~0.6s each
-./spin.py --news          # just watch the live-headline animation
-./spin.py --set news      # apply a pack straight away, no menu (verbs|news|toggle)
-./spin.py --status        # which pack is active right now
-./spin.py --interval 0.3  # faster
-./spin.py --once          # one verb and quit, handy for status lines
-```
+## Why
 
-`--set` is the no-menu path: wire it to a shell alias or a Claude Code `/spinner` command and flip packs in one keystroke.
+Claude Code lets you swap out the verbs it shows while it's working on your prompt. The stock set is whimsical: "Noodling", "Lollygagging", "Shenaniganing". Pleasant. A little pleased with itself.
 
-Picking **profanity** writes the eighty verbs into your `spinnerVerbs`; picking **live news** writes the latest markets headlines and a background poller keeps them fresh. The `--verbs` / `--news` flags don't touch your settings — they just run the standalone animation so you can preview a pack.
+This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Then twenty more packs besides — pirate, eldritch, corporate, Shakespearean, zen — and a dozen colour themes that recolour Claude Code's real spinner, plus thirty-six animations for the previews here. ([Which is which.](#what-actually-reaches-claude-code))
 
 ![the spinner cycling through the pack](demo.svg)
 
-Claude Code lets you swap out its spinner verbs. The stock set is whimsical: "Noodling", "Lollygagging", "Shenaniganing". Pleasant. A little pleased with itself.
+There's a catch with the real spinner: it only swaps a verb when a new operation starts, so a whole session shows you maybe five of the eighty and none of the good ones. The previews here run them on a timer instead, fast enough that the full pack actually goes past.
 
-This is the other set. The one a senior dev mutters at 2am when the build is on fire: `faffing`, `unfucking`, `yak-shaving`, `yeeting-to-prod`, `polishing-a-turd`, `crashing-out`. Eighty of them.
+## Using it
 
-There's a catch with the real spinner. It only swaps a verb when a new operation starts, so a whole session shows you maybe five of the eighty and none of the good ones. This one runs them on a timer instead, fast enough that the full pack actually goes past.
+```bash
+spin                          # the gallery (this is the one you want)
+spin --list                   # every pack, animation and theme, as text
+spin --list --json            # the same, machine-readable
 
-## Put it in your real spinner
+spin --pack eldritch          # preview a pack in the terminal
+spin --pack pirate --spinner moon --theme void   # mix and match
+spin --random                 # surprise me
+spin --wall                   # every animation running at once
 
-The picker does this for you — pick a pack and it writes `spinnerVerbs` into `~/.claude/settings.json` (mode `"replace"`, other settings untouched). If you'd rather do it by hand:
+spin --set british            # apply a pack, no menu
+spin --set zen --theme ice    # …and recolour Claude Code's real spinner
+spin --mix pirate wizard zen  # blend several packs into one spinner
+spin --status                 # what's active right now
+spin --restore                # put back the spinner and colour you had before
+
+spin --no-theme               # apply verbs only, leave the colour alone
+spin --theme-base light       # the preset the written theme starts from
+spin --print-theme void       # the theme JSON, without installing it
+
+spin --sfw                    # hide the rude packs (gallery, --list, --random)
+spin --search dns             # filter packs by name, description or verb
+spin --once                   # one verb and quit, handy for status lines
+```
+
+`--set` and `--restore` are the no-menu paths: wire them to a shell alias or a Claude Code `/spinner` command and flip packs in a keystroke. Everything that writes to your settings is reversible — see [Applying and undoing](#applying-and-undoing).
+
+### In the gallery
+
+| key | does |
+| --- | --- |
+| `↑` `↓` / `j` `k` | move between packs |
+| `enter` | apply this pack to Claude Code |
+| `/` | search packs *and their verbs* — `enter` accepts, `esc` clears |
+| `tab` | cycle the category filter |
+| `s` | toggle the safe-for-work filter |
+| `f` / `F` | cycle the animation forwards / back |
+| `t` / `T` | cycle the colour theme forwards / back |
+| `w` | wall mode — every animation at once |
+| `r` | randomise pack, animation and theme |
+| `u` | restore the spinner and colour you had before |
+| `?` | key help |
+| `q` | quit, changing nothing |
+
+The right-hand pane draws a box exactly **56 columns** wide — the width Claude Code chops the verb line at — so you can see at a glance which verbs are living dangerously. It draws them in braille and in the pack's real colour, because that's what Claude Code will actually render; the animation you pick with `f` drives the list rows and the standalone previews.
+
+## What ships
+
+<!-- BEGIN GENERATED TABLES -->
+
+| pack | verbs | rating | what it is |
+| --- | --- | --- | --- |
+| `profanity` | 80 | nsfw | the original 2am verb pack |
+| `british` | 50 | nsfw | everything has gone pear-shaped, mildly |
+| `scottish` | 40 | nsfw | pure bealing, so it is |
+| `cope` | 42 | mild | the five stages, compressed into one build |
+| `prod` | 40 | mild | forty things you should never do to a live system |
+| `sysadmin` | 40 | mild | it was DNS. it is always DNS. |
+| `honest` | 49 | sfw | what the work actually is, most days |
+| `corporate` | 44 | sfw | circling back to socialise the deck |
+| `eldritch` | 44 | sfw | something in the dependency tree is awake |
+| `pirate` | 40 | sfw | the rum is gone and so is the build |
+| `medieval` | 40 | sfw | the siege is going badly |
+| `hacker` | 40 | sfw | jacked in, ice broken, logs wiped |
+| `noir` | 39 | mild | it was raining. it's always raining. |
+| `existential` | 39 | sfw | one must imagine the compiler happy |
+| `chef` | 40 | sfw | yes chef. behind. corner. hot pan. |
+| `wizard` | 39 | sfw | a wizard is never late |
+| `commentator` | 38 | sfw | absolute scenes in the terminal |
+| `shakespeare` | 39 | mild | thou art erroring, and most foully |
+| `genz` | 39 | mild | let him cook |
+| `gymbro` | 39 | mild | just one more set |
+| `zen` | 35 | sfw | the build is neither late nor early |
+| `chaos` | live | nsfw | a shuffled sample of every pack at once |
+| `news` | live | sfw | the latest wire headlines, refreshed in the background |
+
+| animation | frames | animation | frames |
+| --- | --- | --- | --- |
+| `braille` | `⠋⠙⠹⠸⠼⠴⠦⠧` | `braille2` | `⣾⣽⣻⢿⡿⣟⣯⣷` |
+| `braille3` | `⠁⠂⠄⡀⢀⠠⠐⠈` | `dots` | `⢹⢺⢼⣸⣇⡧⡗⡏` |
+| `bounce` | `⠁⠂⠄⠂` | `line` | `|/-\` |
+| `layer` | `-=≡=` | `pipe` | `┤┘┴└├┌┬┐` |
+| `arc` | `◜◠◝◞◡◟` | `circle` | `◐◓◑◒` |
+| `quadrant` | `◴◷◶◵` | `square` | `◰◱◲◳` |
+| `half` | `◧◨◩◪` | `triangle` | `◢◣◤◥` |
+| `corner` | `▖▘▝▗` | `toggle` | `⊶⊷` |
+| `switch` | `▮▯` | `blocks` | `▁▂▃▄▅▆▇█` |
+| `grow` | `▏▎▍▌▋▊▉█` | `noise` | `░▒▓█▓▒` |
+| `pulse` | `·•●•` | `star` | `✶✸✹✺✹✷` |
+| `arrows` | `←↖↑↗→↘↓↙` | `arrows2` | `⇐⇖⇑⇗⇒⇘⇓⇙` |
+| `orbit` | `◜◝◞◟` | `flip` | `` _-`'´-_  `` |
+| `dqpb` | `dqpb` | `binary` | `0010 1010 1101 0110` |
+| `bar` | `▰▱▱▱▱ ▰▰▱▱▱ ▰▰▰▱▱ ▰▰▰▰▱` | `point` | `∙∙∙ ●∙∙ ∙●∙ ∙∙●` |
+| `balloon` | ` .oO@* ` | `moon` | `🌑🌒🌓🌔🌕🌖🌗🌘` |
+| `earth` | `🌍🌎🌏` | `clock` | `🕐🕑🕒🕓🕔🕕🕖🕗` |
+| `hearts` | `💛💙💜💚🧡` | `static` | `●` |
+
+| theme | style | spinner colour | theme | style | spinner colour |
+| --- | --- | --- | --- | --- | --- |
+| `acid` | solid | `#b5ff00` | `ember` | gradient | `#ff6b1a` |
+| `void` | gradient | `#9d4edd` | `ice` | gradient | `#5bc0eb` |
+| `matrix` | gradient | `#00ff41` | `blood` | gradient | `#c4141c` |
+| `gold` | gradient | `#ffc107` | `vapor` | gradient | `#ff71ce` |
+| `deep` | gradient | `#0091ad` | `bone` | solid | `#d8d2c4` |
+| `mono` | solid | `#e6edf3` | `rainbow` | rainbow | `#ff0000` |
+
+<!-- END GENERATED TABLES -->
+
+Ratings: `sfw` is safe to have on screen in an open-plan office, `mild` is cheerfully crude, `nsfw` is the reason the project is called this. `spin --sfw` filters to the first group, and so does `s` in the gallery.
+
+Two packs are **live** rather than fixed: `news` pulls real headlines from a JSON feed, and `chaos` deals a shuffled hand from every other pack each time you apply it.
+
+## What actually reaches Claude Code
+
+Worth being precise, because a pack has three parts and only two of them leave this program:
+
+| | reaches Claude Code | how |
+| --- | --- | --- |
+| **verbs** | yes | `spinnerVerbs` in `~/.claude/settings.json` |
+| **colour** | yes | a custom theme in `~/.claude/themes/obscene-spinner.json` |
+| **animation** | **no** | Claude Code draws its own glyph; there's no setting for it |
+
+So `--spinner moon` gives you moon phases in the gallery, in `--pack` previews and in `--wall` — but Claude Code's own spinner stays braille. The gallery's preview box shows braille for exactly that reason: it's a preview, so it has to tell the truth. The colour beside it, though, is genuinely what you'll get.
+
+## Applying and undoing
+
+Picking a pack writes `spinnerVerbs` into `~/.claude/settings.json` with mode `"replace"`, atomically, leaving every other setting exactly as it was:
 
 ```json
 {
@@ -52,23 +166,89 @@ The picker does this for you — pick a pack and it writes `spinnerVerbs` into `
 }
 ```
 
-The whole list is the `VERBS` array in [`spin.py`](spin.py); copy it straight across. Fair warning: `"replace"` throws out the polite defaults, so this is not the version you want on screen during a demo.
+Because `"replace"` throws out the polite defaults, the **first** time you apply anything, whatever `spinnerVerbs` you had is copied to `~/.claude/spinner-backup.json` — and only the first time, so a hundred more applies can't bury the original. `spin --restore` puts it back, byte for byte, and deletes the key entirely if you didn't have one to begin with.
+
+```bash
+spin --set eldritch    # off you go
+spin --restore         # ✓ restored your previous spinnerVerbs.
+```
+
+Fair warning either way: this is not the version you want on screen during a demo.
+
+## Colouring the real spinner
+
+Claude Code's spinner colour comes from the `claude` theme token, so picking a pack also writes a small theme file:
+
+```json ~/.claude/themes/obscene-spinner.json
+{
+  "name": "obscene-spinner (Void)",
+  "base": "dark",
+  "overrides": {
+    "claude": "#9d4edd",
+    "claudeShimmer": "#c495eb"
+  }
+}
+```
+
+Only those two tokens are ever written. `overrides` is additive — anything not listed falls through to the base preset — so the rest of your interface is untouched. (`claudeShimmer` is the lighter half of the spinner's gradient; each theme's is derived so it's always genuinely lighter than `claude`, including the themes that shade bright→dark.)
+
+**Turn it on once:** run `/theme` in Claude Code and pick **obscene-spinner**. After that you never touch it again — every `spin --set` rewrites the same file, and Claude Code watches that directory, so the colour changes live in a running session.
+
+```bash
+spin --set eldritch --theme void   # writes the file, tells you to run /theme
+spin --set zen --theme matrix      # colour changes immediately, no /theme needed
+spin --status                      # shows the active colour and where it came from
+```
+
+Two caveats worth knowing:
+
+- **`base` sets your whole UI, not just the spinner.** It defaults to `dark`; pass `--theme-base light` (or `dark-daltonized`, `light-ansi`, …) if that's wrong for you. `spin` prints which base it wrote.
+- **If `~/.claude/themes/` didn't exist when Claude Code started**, restart it once after the first apply. After that, changes apply without a restart.
+
+Don't want it? `--no-theme` applies the verbs alone. Want the JSON without installing anything? `--print-theme void`. And `--restore` removes the file — or hands back a theme you'd hand-written at that filename, byte for byte.
+
+## Your own packs
+
+Drop a JSON file in `~/.claude/spinner-packs/` and it shows up in the gallery beside the built-ins:
+
+```json
+{
+  "id": "mine",
+  "name": "My Pack",
+  "desc": "what I'm actually doing",
+  "category": "custom",
+  "rating": "sfw",
+  "spinner": "pulse",
+  "theme": "ice",
+  "verbs": ["fiddling", "tinkering", "poking"]
+}
+```
+
+Only `id` and `verbs` are required. Give it the `id` of a built-in and yours wins — that's how you override one.
+
+```bash
+spin --export pirate -o pirate.json   # start from a pack you like
+spin --import mine.json               # install one (validates first)
+```
+
+Bad files never stop the tool: a malformed pack is reported and skipped, and a single over-long verb or unknown theme name costs you that verb or falls back to a default rather than binning the whole pack.
 
 ## News mode
 
-Same spinner, different pack: live news headlines instead of verbs. Pick **live news** in the menu and it becomes your Claude Code spinner. Out of the box it reads a live **markets wire** — the top Reuters market stories, refreshed every few minutes — one headline at a time, with the spinner animating on the left.
+Same spinner, different pack: live headlines instead of verbs. Out of the box it reads a markets wire — the top Reuters market stories, refreshed in the background — one headline at a time.
 
 ```bash
-./spin.py --news                       # preview: ~5s per headline, refreshes in the background
-./spin.py --news --interval 1.2        # faster churn
-./spin.py --news --news-url URL        # or set SPIN_NEWS_URL — any {"items": [...]} JSON
+spin --pack news                       # ~5s per headline, refreshes as it runs
+spin --pack news --interval 1.2        # faster churn
+spin --pack news --news-url URL        # or set SPIN_NEWS_URL
+spin --set news                        # make the wire your Claude Code spinner
 ```
 
-**Read the story:** while the ticker runs, press `n` to pause and read the current headline's summary, then any key to resume (`q` quits). One catch — the summary only works in this standalone ticker, not in Claude Code's own spinner, which Claude Code draws itself.
+**Read the story:** while the ticker runs, press `n` to pause and read the current headline's summary, then any key to resume (`q` quits). That only works in this standalone ticker, not in Claude Code's own spinner, which Claude Code draws itself.
 
-Each headline is measured by real screen width — Chinese text and emoji count as two columns, accents as zero — then filled right to the edge and capped with `…`, recomputed every frame. So it never overflows or wraps, packs the line tight, and re-fits the instant you resize. Headlines are reshuffled like a deck, so you see the whole feed before any repeat.
+Point `--news-url` (or `SPIN_NEWS_URL`) at any small JSON endpoint shaped like `{"items": ["headline", ...]}` — objects with `title` and `summary` work too. No network, no feed? It says so and exits instead of hanging.
 
-Still Python 3 and nothing else — the feed is fetched with the standard library. The default is the markets wire, but point `--news-url` (or `SPIN_NEWS_URL`) at any small JSON endpoint shaped like `{"items": ["headline", ...]}` and it'll spin whatever you feed it. No network, no feed? It says so and exits instead of hanging.
+Headlines get two different treatments, deliberately. In the ticker, each is measured by real screen width — Chinese counts as two columns, accents as zero — then filled right to the edge and capped with `…`, recomputed every frame so it re-fits the instant you resize. But a headline *applied* to Claude Code can't end in a dangling fragment, so it's **shortened** instead: source tag stripped, stock words abbreviated, articles dropped, then trimmed to the leading clause. The result still reads as a headline.
 
 ## The verbs
 
@@ -79,8 +259,25 @@ Roughly four moods, because a bad session moves through all of them:
 - **Honest engineering** — yak-shaving, bikeshedding, monkeypatching, footgunning, kludging
 - **Do not do this in prod** — yeeting-to-prod, force-pushing-to-main, rm-rf-ing, shipping-and-praying
 
-A single frame, if the animation above won't play in your viewer:
+A single frame, if the animations above won't play in your viewer:
 
 ![one frame of the spinner](still.svg)
+
+## Terminals that aren't yours
+
+It degrades rather than breaks. `NO_COLOR`, `TERM=dumb`, a pipe, or `--no-color` all produce plain text with no escape codes at all. A 16-colour terminal gets the nearest ANSI colour; a 256-colour one gets the cube; anything advertising `COLORTERM=truecolor` gets the real thing. Colour pairs are allocated on demand and capped at what the terminal actually offers, so a small `TERM` can't crash the gallery. The layout reflows from 200 columns down to about 30, dropping the detail pane and then the key hints as room runs out, and `spin --verbs | head` exits like any other Unix filter.
+
+## Hacking on it
+
+```bash
+python3 -m unittest discover -s tests -v   # 140 tests, stdlib only
+./spin.py --selftest                       # the same suite, front door
+python3 make_demo.py                       # regenerate the SVGs
+python3 tools/check_docs.py --write        # regenerate the tables above
+```
+
+The tables in this README, the SVGs, and the `--list` output all come from the same registries in `spin.py`, and CI fails if any of them drift. The gallery's layout is drawn against a tiny screen interface with two backends — curses, and a plain character grid — so the whole TUI is rendered and asserted in tests without needing a terminal.
+
+Adding a pack is one entry in `PACKS`. Adding an animation is one entry in `SPINNERS`; the tests will tell you off if its frames aren't all the same display width, because that makes the verb beside it jitter.
 
 The stock verbs are fine. But sometimes the honest status really is `bodging`, and the terminal may as well say so.
